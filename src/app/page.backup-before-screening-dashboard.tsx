@@ -44,10 +44,8 @@ export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [currentProfile, setCurrentProfile] = useState<any>(null);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
-const [mocs, setMocs] = useState<MocSummary[]>([]);
-const [screeningDashboard, setScreeningDashboard] = useState<any>(null);
-const [screeningList, setScreeningList] = useState<any[]>([]);
-const [loading, setLoading] = useState(false);
+  const [mocs, setMocs] = useState<MocSummary[]>([]);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   async function loadData() {
@@ -71,36 +69,14 @@ const [loading, setLoading] = useState(false);
       .order("request_no", { ascending: true });
 
     if (mocError) {
-  setMessage(`MOC list error: ${mocError.message}`);
-  setLoading(false);
-  return;
-}
+      setMessage(`MOC list error: ${mocError.message}`);
+      setLoading(false);
+      return;
+    }
 
-const { data: screeningData, error: screeningError } = await supabase
-  .from("v_moc_screening_dashboard")
-  .select("*")
-  .single();
-
-if (screeningError) {
-  setMessage(`Screening dashboard error: ${screeningError.message}`);
-  setLoading(false);
-  return;
-}
-const { data: screeningListData, error: screeningListError } = await supabase
-  .from("v_moc_screening_decision_list")
-  .select("*")
-  .order("created_at", { ascending: false });
-
-if (screeningListError) {
-  setMessage(`Screening list error: ${screeningListError.message}`);
-  setLoading(false);
-  return;
-}
-setOverview(overviewData as DashboardOverview);
-setMocs((mocData || []) as MocSummary[]);
-setScreeningDashboard(screeningData);
-setScreeningList(screeningListData || []);
-setLoading(false);
+    setOverview(overviewData as DashboardOverview);
+    setMocs((mocData || []) as MocSummary[]);
+    setLoading(false);
   }
 
   async function checkSession() {
@@ -135,11 +111,9 @@ setLoading(false);
   async function handleLogout() {
     await supabase.auth.signOut();
     setUserEmail(null);
-setOverview(null);
-setMocs([]);
-setScreeningDashboard(null);
-setScreeningList([]);
-setMessage("");
+    setOverview(null);
+    setMocs([]);
+    setMessage("");
   }
 
   useEffect(() => {
@@ -245,17 +219,10 @@ setMessage("");
            {overview && (
   <div className="mb-6 space-y-4">
     <div className="grid gap-4 md:grid-cols-4">
-     <DashboardCard label="Total Request" value={overview.total_moc} />
-<DashboardCard label="Open Full MOC" value={overview.open_moc} />
-<DashboardCard
-  label="Closed Full MOC"
-  value={Math.max(
-    0,
-    (overview.closed_moc ?? 0) -
-      ((screeningDashboard?.closed_rik_non_moc_count ?? 0) +
-        (screeningDashboard?.closed_rejected_count ?? 0))
-  )}
-/>      <DashboardCard
+      <DashboardCard label="Total MOC" value={overview.total_moc} />
+      <DashboardCard label="Open MOC" value={overview.open_moc} />
+      <DashboardCard label="Closed MOC" value={overview.closed_moc} />
+      <DashboardCard
         label="High Priority Open"
         value={overview.high_priority_open_moc}
       />
@@ -273,95 +240,6 @@ setMessage("");
         value={overview.moc_created_this_month}
       />
     </div>
-<div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-  <div className="mb-4">
-    <h2 className="text-xl font-bold text-slate-950">Screening Result</h2>
-    <p className="text-sm text-slate-500">
-      Data diambil dari Supabase view v_moc_screening_dashboard.
-    </p>
-  </div>
-
- <div className="grid gap-4 md:grid-cols-5">
-    <MiniKpi
-      label="MOC Required"
-      value={screeningDashboard?.moc_required_count ?? 0}
-    />
-    <MiniKpi
-      label="RIK / Non-MOC"
-      value={screeningDashboard?.rik_non_moc_count ?? 0}
-    />
-    <MiniKpi
-      label="Rejected"
-      value={screeningDashboard?.rejected_count ?? 0}
-    />
-<MiniKpi
-  label="Need More Info"
-  value={screeningDashboard?.need_more_info_count ?? 0}
-/>
-    <MiniKpi
-  label="Closed at Screening"
-  value={screeningDashboard?.screened_out_count ?? 0}
-/>
-  </div>
-</div>
-<div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-  <div className="mb-4">
-    <h2 className="text-xl font-bold text-slate-950">
-      Screening Decision List
-    </h2>
-    <p className="text-sm text-slate-500">
-      Daftar request yang sudah melalui proses screening decision.
-    </p>
-  </div>
-
-  <div className="space-y-3">
-    {screeningList.length === 0 ? (
-      <p className="text-sm text-slate-500">Belum ada data screening.</p>
-    ) : (
-      screeningList.map((item) => (
-        <div
-          key={item.request_no}
-          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-        >
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-sm font-bold text-emerald-700">
-                {item.request_no}
-              </p>
-              <h3 className="mt-1 text-base font-bold text-slate-950">
-                {item.title}
-              </h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Status: <span className="font-semibold">{item.status}</span>
-              </p>
-              <p className="mt-1 text-sm text-slate-600">
-                Comment:{" "}
-                <span className="font-semibold">
-                  {item.screening_comment || "-"}
-                </span>
-              </p>
-            </div>
-
-            <div className="flex flex-col items-start gap-2 md:items-end">
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                {item.screening_decision === "need_more_info"
-                  ? "Need More Info"
-                  : item.screening_decision_label}
-              </span>
-
-              <a
-                href={`/moc/${item.request_no}`}
-                className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white"
-              >
-                View Detail
-              </a>
-            </div>
-          </div>
-        </div>
-      ))
-    )}
-  </div>
-</div>
   </div>
 )}
 
