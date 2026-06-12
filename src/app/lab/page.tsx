@@ -1,48 +1,54 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+
+type LabApp = {
+  id: string;
+  app_key: string;
+  app_name: string;
+  category: string | null;
+  status: string;
+  priority: number | null;
+  target_market: string | null;
+  description: string | null;
+  route_path: string | null;
+  icon_emoji: string | null;
+  is_active: boolean;
+};
+
 export default function LabDashboardPage() {
-  const apps = [
-    {
-      name: "MOC Manager Pro",
-      route: "/lab/moc",
-      status: "MVP",
-      category: "Process Safety",
-      description: "Management of Change workflow: request, screening, impact review, actions, PSSR, approval, and closure.",
-    },
-    {
-      name: "E-Permit Toolkit",
-      route: "/lab/epermit",
-      status: "Idea",
-      category: "HSE Operations",
-      description: "Digital permit-to-work concept for high-risk jobs, approval, worker list, and job closure.",
-    },
-    {
-      name: "OEE Toolkit",
-      route: "/lab/oee",
-      status: "Idea",
-      category: "Operational Excellence",
-      description: "OEE monitoring for availability, performance, quality, downtime, and production reporting.",
-    },
-    {
-      name: "CCTV Safety Observation",
-      route: "/lab/cctv-safety",
-      status: "Idea",
-      category: "Safety Technology",
-      description: "Safety observation dashboard concept using CCTV, unsafe action records, and corrective action tracking.",
-    },
-    {
-      name: "RT/RW Digital Admin",
-      route: "/lab/rtrw",
-      status: "Idea",
-      category: "Community Administration",
-      description: "Resident data, letters, dues, complaints, and local community administration.",
-    },
-    {
-      name: "Exam Question Bank",
-      route: "/lab/edu-exam",
-      status: "Idea",
-      category: "Education",
-      description: "Question bank for school exercises, exam questions, answers, and review history.",
-    },
-  ];
+  const [apps, setApps] = useState<LabApp[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  async function loadApps() {
+    setLoading(true);
+    setMessage("");
+
+    const { data, error } = await supabase
+      .from("lab_apps")
+      .select(
+        "id, app_key, app_name, category, status, priority, target_market, description, route_path, icon_emoji, is_active"
+      )
+      .eq("is_active", true)
+      .order("priority", { ascending: true })
+      .order("app_name", { ascending: true });
+
+    if (error) {
+      setMessage(`Failed to load Lab Apps: ${error.message}`);
+      setApps([]);
+      setLoading(false);
+      return;
+    }
+
+    setApps((data || []) as LabApp[]);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadApps();
+  }, []);
 
   return (
     <main style={{ padding: "32px", fontFamily: "Arial, sans-serif" }}>
@@ -61,57 +67,122 @@ export default function LabDashboardPage() {
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: "16px",
-            marginTop: "28px",
+            marginTop: "20px",
+            padding: "14px 16px",
+            border: "1px solid #eee",
+            borderRadius: "12px",
+            background: "#fafafa",
+            color: "#555",
           }}
         >
-          {apps.map((app) => (
-            <a
-              key={app.route}
-              href={app.route}
-              style={{
-                display: "block",
-                textDecoration: "none",
-                color: "inherit",
-                border: "1px solid #ddd",
-                borderRadius: "16px",
-                padding: "20px",
-                background: "#fff",
-              }}
-            >
-              <div
+          <strong>Database source:</strong> Supabase table{" "}
+          <code>lab_apps</code>
+        </div>
+
+        {loading && (
+          <p style={{ marginTop: "28px", color: "#777" }}>
+            Loading LetsDo Lab apps...
+          </p>
+        )}
+
+        {message && (
+          <div
+            style={{
+              marginTop: "24px",
+              padding: "14px 16px",
+              border: "1px solid #f0b5b5",
+              borderRadius: "12px",
+              background: "#fff5f5",
+              color: "#9b1c1c",
+            }}
+          >
+            {message}
+          </div>
+        )}
+
+        {!loading && !message && apps.length === 0 && (
+          <p style={{ marginTop: "28px", color: "#777" }}>
+            No active lab apps found.
+          </p>
+        )}
+
+        {!loading && !message && apps.length > 0 && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "16px",
+              marginTop: "28px",
+            }}
+          >
+            {apps.map((app) => (
+              <a
+                key={app.id}
+                href={app.route_path || `/lab/${app.app_key}`}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  marginBottom: "12px",
+                  display: "block",
+                  textDecoration: "none",
+                  color: "inherit",
+                  border: "1px solid #ddd",
+                  borderRadius: "16px",
+                  padding: "20px",
+                  background: "#fff",
                 }}
               >
-                <strong>{app.name}</strong>
-                <span
+                <div
                   style={{
-                    fontSize: "12px",
-                    padding: "4px 8px",
-                    borderRadius: "999px",
-                    background: "#f2f2f2",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    marginBottom: "12px",
                   }}
                 >
-                  {app.status}
-                </span>
-              </div>
+                  <strong>
+                    {app.icon_emoji ? `${app.icon_emoji} ` : ""}
+                    {app.app_name}
+                  </strong>
 
-              <p style={{ margin: "0 0 10px", color: "#777", fontSize: "14px" }}>
-                {app.category}
-              </p>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      padding: "4px 8px",
+                      borderRadius: "999px",
+                      background: "#f2f2f2",
+                    }}
+                  >
+                    {app.status}
+                  </span>
+                </div>
 
-              <p style={{ margin: 0, color: "#555", lineHeight: 1.5 }}>
-                {app.description}
-              </p>
-            </a>
-          ))}
-        </div>
+                <p
+                  style={{
+                    margin: "0 0 10px",
+                    color: "#777",
+                    fontSize: "14px",
+                  }}
+                >
+                  {app.category || "Uncategorized"}
+                </p>
+
+                <p style={{ margin: 0, color: "#555", lineHeight: 1.5 }}>
+                  {app.description || "No description yet."}
+                </p>
+
+                {app.target_market && (
+                  <p
+                    style={{
+                      margin: "14px 0 0",
+                      color: "#777",
+                      fontSize: "13px",
+                    }}
+                  >
+                    Target: {app.target_market}
+                  </p>
+                )}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );
