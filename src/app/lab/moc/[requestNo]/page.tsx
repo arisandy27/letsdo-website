@@ -56,6 +56,10 @@ export default function MocDetailPage() {
   const [actions, setActions] = useState<any[]>([]);
   const [approvals, setApprovals] = useState<any[]>([]);
   const [pssr, setPssr] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [attachmentStep, setAttachmentStep] = useState("request");
+  const [attachmentNotes, setAttachmentNotes] = useState("");
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -176,6 +180,7 @@ export default function MocDetailPage() {
     setActions(actionsResult.data || []);
     setApprovals(approvalsResult.data || []);
     setPssr(pssrResult.data || []);
+    await loadAttachments(mocData.id);
     setLoading(false);
   }
 
@@ -866,6 +871,116 @@ export default function MocDetailPage() {
     await loadDetail();
   }
 
+
+
+  async function loadAttachments(mocRequestId: string) {
+    const { data, error } = await supabase
+      .from("moc_attachments")
+      .select("*")
+      .eq("moc_request_id", mocRequestId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setMessage("Attachment load error: " + error.message);
+      return;
+    }
+
+    setAttachments(data || []);
+  }
+
+  async function handleUploadAttachment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!moc) return;
+
+    setMessage("");
+    setUploadingAttachment(true);
+
+    const fileInput = document.getElementById(
+      "moc_attachment_file"
+    ) as HTMLInputElement | null;
+
+    const file = fileInput?.files?.[0];
+
+    if (!file) {
+      setMessage("Please choose a file to upload.");
+      setUploadingAttachment(false);
+      return;
+    }
+
+    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath =
+      "moc/" +
+      moc.request_no +
+      "/" +
+      attachmentStep +
+      "/" +
+      Date.now() +
+      "_" +
+      safeFileName;
+
+    const { error: uploadError } = await supabase.storage
+      .from("lab-files")
+      .upload(storagePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      setMessage("Failed to upload file: " + uploadError.message);
+      setUploadingAttachment(false);
+      return;
+    }
+
+    const { error: insertError } = await supabase
+      .from("moc_attachments")
+      .insert({
+        moc_request_id: moc.id,
+        step_key: attachmentStep,
+        related_table: "moc_requests",
+        related_id: moc.id,
+        file_name: file.name,
+        file_type: file.type || null,
+        file_size: file.size,
+        storage_bucket: "lab-files",
+        storage_path: storagePath,
+        uploaded_by_name: "Bobby Rachmat Arisandy",
+        notes: attachmentNotes.trim() || null,
+      });
+
+    if (insertError) {
+      setMessage("File uploaded, but failed to save metadata: " + insertError.message);
+      setUploadingAttachment(false);
+      return;
+    }
+
+    if (fileInput) {
+      fileInput.value = "";
+    }
+
+    setAttachmentNotes("");
+    setMessage("Attachment uploaded successfully.");
+    setUploadingAttachment(false);
+    await loadAttachments(moc.id);
+  }
+
+  async function handleOpenAttachment(item: any) {
+    setMessage("");
+
+    const { data, error } = await supabase.storage
+      .from(item.storage_bucket || "lab-files")
+      .createSignedUrl(item.storage_path, 60 * 5);
+
+    if (error) {
+      setMessage("Failed to open attachment: " + error.message);
+      return;
+    }
+
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    }
+  }
+
   useEffect(() => {
     loadDetail();
   }, [requestNo]);
@@ -979,6 +1094,163 @@ export default function MocDetailPage() {
                   </div>
                 ))}
               </div>
+            </Card>
+            <Card title="Attachments / Evidence">
+              <form
+                onSubmit={handleUploadAttachment}
+                style={{
+                  display: "grid",
+                  gap: "12px",
+                  marginBottom: "18px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    gap: "12px",
+                  }}
+                >
+                  <div>
+                    <label
+                      style={{
+                        display: "block",
+                        fontWeight: 600,
+                        marginBottom: "6px",
+                      }}
+                    >
+                      Step
+                    </label>
+                    <select
+                      value={attachmentStep}
+                      onChange={(event) => setAttachmentStep(event.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        border: "1px solid #ddd",
+                        borderRadius: "10px",
+                      }}
+                    >
+                      <option value="request">Request</option>
+                      <option value="screening">Screening</option>
+                      <option value="impact_review">Impact Review</option>
+                      <option value="action_tracker">Action Tracker</option>
+                      <option value="pssr">PSSR</option>
+                      <option value="approval">Approval</option>
+                      <option value="closure">Closure</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      style={{
+                        display: "block",
+                        fontWeight: 600,
+                        marginBottom: "6px",
+                      }}
+                    >
+                      File
+                    </label>
+                    <input
+                      id="moc_attachment_file"
+                      type="file"
+                      style={{
+                        width: "100%",
+                        padding: "9px",
+                        border: "1px solid #ddd",
+                        borderRadius: "10px",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      fontWeight: 600,
+                      marginBottom: "6px",
+                    }}
+                  >
+                    Notes
+                  </label>
+                  <textarea
+                    value={attachmentNotes}
+                    onChange={(event) => setAttachmentNotes(event.target.value)}
+                    placeholder="Optional notes for this attachment"
+                    style={{
+                      width: "100%",
+                      minHeight: "70px",
+                      padding: "10px",
+                      border: "1px solid #ddd",
+                      borderRadius: "10px",
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <button
+                    type="submit"
+                    disabled={uploadingAttachment}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "10px",
+                      border: "1px solid #222",
+                      background: uploadingAttachment ? "#777" : "#222",
+                      color: "#fff",
+                      cursor: uploadingAttachment ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {uploadingAttachment ? "Uploading..." : "Upload Attachment"}
+                  </button>
+                </div>
+              </form>
+
+              {attachments.length === 0 && (
+                <p style={{ color: "#777" }}>No attachment uploaded yet.</p>
+              )}
+
+              {attachments.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: "12px 0",
+                    borderTop: "1px solid #eee",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    alignItems: "center",
+                  }}
+                >
+                  <div>
+                    <strong>{item.file_name}</strong>
+                    <p style={{ color: "#777", margin: "6px 0 0" }}>
+                      Step: {String(item.step_key || "-").replaceAll("_", " ")}
+                      {" · "}
+                      Uploaded by: {item.uploaded_by_name || "-"}
+                    </p>
+                    {item.notes && (
+                      <p style={{ color: "#555", margin: "6px 0 0" }}>
+                        Notes: {item.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAttachment(item)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: "10px",
+                      border: "1px solid #ddd",
+                      background: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Open
+                  </button>
+                </div>
+              ))}
             </Card>
             <Card title="Request Detail">
               <div
