@@ -76,7 +76,9 @@ export default function MocDetailPage() {
       (item) =>
         item.approval_stage === "pssr_approval" &&
         item.decision === "approved"
-    ) || moc?.status === "implemented";
+    ) || moc?.status === "implemented" || moc?.status === "closed";
+
+  const mocClosed = moc?.status === "closed";
 
   async function loadDetail() {
     if (!requestNo) return;
@@ -793,6 +795,65 @@ export default function MocDetailPage() {
     await loadDetail();
   }
 
+
+  async function handleCompleteImplementationAndCloseMoc() {
+    if (!moc) return;
+
+    setMessage("");
+
+    if (!approvedForImplementation) {
+      setMessage("MOC must be approved for implementation before closure.");
+      return;
+    }
+
+    const existingClosureApproval = approvals.find(
+      (item) => item.approval_stage === "closure_approval"
+    );
+
+    const closurePayload = {
+      moc_request_id: moc.id,
+      approval_stage: "closure_approval",
+      approver_role: "MOC Closure Owner",
+      approver_name: "Bobby Rachmat Arisandy",
+      decision: "approved",
+      decision_notes:
+        "Implementation verified and MOC closed from LetsDo Lab closure gate.",
+      decided_at: new Date().toISOString(),
+    };
+
+    const closureResponse = existingClosureApproval?.id
+      ? await supabase
+          .from("moc_approvals")
+          .update(closurePayload)
+          .eq("id", existingClosureApproval.id)
+      : await supabase.from("moc_approvals").insert(closurePayload);
+
+    if (closureResponse.error) {
+      setMessage(
+        "Failed to save closure approval: " + closureResponse.error.message
+      );
+      return;
+    }
+
+    const { error: mocUpdateError } = await supabase
+      .from("moc_requests")
+      .update({
+        status: "closed",
+      })
+      .eq("id", moc.id);
+
+    if (mocUpdateError) {
+      setMessage(
+        "Closure approval saved, but failed to close MOC: " +
+          mocUpdateError.message
+      );
+      return;
+    }
+
+    setMessage("Implementation verified. MOC closed successfully.");
+    await loadDetail();
+  }
+
   useEffect(() => {
     loadDetail();
   }, [requestNo]);
@@ -1146,6 +1207,29 @@ export default function MocDetailPage() {
                   {approvedForImplementation
                     ? "Approved for Implementation"
                     : "Approve MOC for Implementation"}
+                </button>
+              </div>
+              <div style={{ marginBottom: "18px" }}>
+                <button
+                  type="button"
+                  disabled={!approvedForImplementation || mocClosed}
+                  onClick={handleCompleteImplementationAndCloseMoc}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #222",
+                    background:
+                      !approvedForImplementation || mocClosed ? "#777" : "#222",
+                    color: "#fff",
+                    cursor:
+                      !approvedForImplementation || mocClosed
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {mocClosed
+                    ? "MOC Closed"
+                    : "Mark Implementation Completed & Close MOC"}
                 </button>
               </div>
               {approvals.length === 0 && (
