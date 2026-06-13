@@ -120,9 +120,27 @@ export default async function FireMaintenancePage() {
         <div>
           <div className="eyebrow">LetsDo Lab / Fire Maintenance Pro</div>
           <h1>Fire Protection Maintenance Dashboard</h1>
-          <p>
-            Monitoring asset fire protection, schedule maintenance, inspection,
-            finding/action tracker, monthly report, dan training record.
+                    <p>
+            Monitoring asset fire protection, schedule maintenance,
+            inspection, finding/action tracker, monthly report, dan training
+            record.
+          </p>
+
+          <p style={{ marginTop: 18 }}>
+            <a
+              href="/lab/fire-maintenance/assets"
+              style={{
+                display: "inline-flex",
+                background: "#ea580c",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+              }}
+            >
+              Open Asset Register →
+            </a>
           </p>
         </div>
 
@@ -328,6 +346,29 @@ const css = `
     color: #64748b;
     line-height: 1.55;
     margin: 0;
+  }
+
+  .hero-actions {
+    margin-top: 18px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .primary-link {
+    display: inline-flex;
+    align-items: center;
+    background: #ea580c;
+    color: white;
+    text-decoration: none;
+    font-weight: 900;
+    padding: 10px 14px;
+    border-radius: 12px;
+    box-shadow: 0 8px 18px rgba(234,88,12,.22);
+  }
+
+  .primary-link:hover {
+    background: #c2410c;
   }
 
   .project-box {
@@ -573,3 +614,5 @@ const css = `
     }
   }
 `;
+
+
