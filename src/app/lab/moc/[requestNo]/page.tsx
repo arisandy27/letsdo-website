@@ -67,6 +67,10 @@ export default function MocDetailPage() {
     actions.length > 0 &&
     actions.every((item) => item.status === "completed");
 
+  const allPssrOk =
+    pssr.length > 0 &&
+    pssr.every((item) => item.result === "ok");
+
   async function loadDetail() {
     if (!requestNo) return;
 
@@ -681,6 +685,50 @@ export default function MocDetailPage() {
     await loadDetail();
   }
 
+
+  async function handleVerifyPssrAndMoveToApproval() {
+    if (!moc) return;
+
+    setMessage("");
+
+    if (pssr.length === 0) {
+      setMessage("No PSSR checklist found. Complete action tracker first.");
+      return;
+    }
+
+    const { error: pssrUpdateError } = await supabase
+      .from("moc_pssr_checklists")
+      .update({
+        result: "ok",
+        verified_by_name: "Bobby Rachmat Arisandy",
+        verified_at: new Date().toISOString(),
+      })
+      .eq("moc_request_id", moc.id);
+
+    if (pssrUpdateError) {
+      setMessage("Failed to verify PSSR checklist: " + pssrUpdateError.message);
+      return;
+    }
+
+    const { error: mocUpdateError } = await supabase
+      .from("moc_requests")
+      .update({
+        status: "approval",
+      })
+      .eq("id", moc.id);
+
+    if (mocUpdateError) {
+      setMessage(
+        "PSSR verified, but failed to update MOC status: " +
+          mocUpdateError.message
+      );
+      return;
+    }
+
+    setMessage("PSSR verified. MOC moved to Approval.");
+    await loadDetail();
+  }
+
   useEffect(() => {
     loadDetail();
   }, [requestNo]);
@@ -1039,6 +1087,29 @@ export default function MocDetailPage() {
             </Card>
 
             <Card title="PSSR Checklist">
+              <div style={{ marginBottom: "18px" }}>
+                <button
+                  type="button"
+                  disabled={pssr.length === 0 || allPssrOk}
+                  onClick={handleVerifyPssrAndMoveToApproval}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #222",
+                    background:
+                      pssr.length === 0 || allPssrOk ? "#777" : "#222",
+                    color: "#fff",
+                    cursor:
+                      pssr.length === 0 || allPssrOk
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {allPssrOk
+                    ? "PSSR Verified / Approval Ready"
+                    : "Mark All PSSR Items OK"}
+                </button>
+              </div>
               {pssr.length === 0 && (
                 <p style={{ color: "#777" }}>No PSSR checklist yet.</p>
               )}
