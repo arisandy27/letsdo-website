@@ -112,6 +112,7 @@ export default function MocLabPage() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [actions, setActions] = useState<MocAction[]>([]);
+  const [allActions, setAllActions] = useState<{ id: string; status: string }[]>([]);
   const [impacts, setImpacts] = useState<MocImpactReview[]>([]);
   const [approvals, setApprovals] = useState<MocApproval[]>([]);
   const [pssr, setPssr] = useState<MocPssr[]>([]);
@@ -127,6 +128,41 @@ export default function MocLabPage() {
     () => requests.find((item) => item.id === selectedId) || null,
     [requests, selectedId]
   );
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      draft: 0,
+      submitted: 0,
+      screening: 0,
+      impact_review: 0,
+      action_tracking: 0,
+      pssr: 0,
+      approval: 0,
+      implemented: 0,
+      closed: 0,
+      rejected: 0,
+      cancelled: 0,
+    };
+
+    for (const item of requests) {
+      counts[item.status] = (counts[item.status] || 0) + 1;
+    }
+
+    return counts;
+  }, [requests]);
+
+  const inProgressMoc = requests.filter(
+    (item) =>
+      !["closed", "rejected", "cancelled"].includes(item.status)
+  ).length;
+
+  const globalOpenActions = allActions.filter(
+    (item) => item.status !== "completed"
+  ).length;
+
+  const globalCompletedActions = allActions.filter(
+    (item) => item.status === "completed"
+  ).length;
 
   const openActions = actions.filter((item) => item.status !== "completed");
   const completedActions = actions.filter((item) => item.status === "completed");
@@ -148,6 +184,18 @@ export default function MocLabPage() {
 
     const rows = (data || []) as MocRequest[];
     setRequests(rows);
+
+    const { data: allActionData, error: allActionError } = await supabase
+      .from("moc_actions")
+      .select("id, status");
+
+    if (allActionError) {
+      setMessage(`Action summary error: ${allActionError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    setAllActions((allActionData || []) as { id: string; status: string }[]);
 
     if (rows.length > 0) {
       setSelectedId(rows[0].id);
@@ -358,12 +406,60 @@ export default function MocLabPage() {
               }}
             >
               <StatCard title="Total MOC" value={requests.length} />
-              <StatCard title="Open Actions" value={openActions.length} />
-              <StatCard title="Completed Actions" value={completedActions.length} />
-              <StatCard title="Impact Reviews" value={impacts.length} />
-              <StatCard title="PSSR Items" value={pssr.length} />
+              <StatCard title="In Progress" value={inProgressMoc} />
+              <StatCard title="Closed" value={statusCounts.closed || 0} />
+              <StatCard title="Open Actions" value={globalOpenActions} />
+              <StatCard title="Completed Actions" value={globalCompletedActions} />
             </div>
 
+            <div
+              style={{
+                border: "1px solid #ddd",
+                borderRadius: "16px",
+                padding: "18px",
+                background: "#fff",
+                marginTop: "18px",
+              }}
+            >
+              <h2 style={{ marginTop: 0, fontSize: "18px" }}>
+                Status Summary
+              </h2>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                  gap: "12px",
+                }}
+              >
+                {[
+                  { label: "Draft", value: "draft" },
+                  { label: "Impact Review", value: "impact_review" },
+                  { label: "Action Tracking", value: "action_tracking" },
+                  { label: "PSSR", value: "pssr" },
+                  { label: "Approval", value: "approval" },
+                  { label: "Implemented", value: "implemented" },
+                  { label: "Closed", value: "closed" },
+                ].map((item) => (
+                  <div
+                    key={item.value}
+                    style={{
+                      border: "1px solid #eee",
+                      borderRadius: "12px",
+                      padding: "12px",
+                      background: "#fafafa",
+                    }}
+                  >
+                    <p style={{ margin: "0 0 8px", color: "#777" }}>
+                      {item.label}
+                    </p>
+                    <strong style={{ fontSize: "22px" }}>
+                      {statusCounts[item.value] || 0}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </div>
             <div
               style={{
                 display: "grid",
