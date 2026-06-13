@@ -173,6 +173,22 @@ export default async function FireMaintenancePage() {
             >
               Open Inspection Form →
             </a>
+
+            <a
+              href="/lab/fire-maintenance/findings"
+              style={{
+                display: "inline-flex",
+                background: "#b91c1c",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginLeft: 10,
+              }}
+            >
+              Open Findings Tracker →
+            </a>
           </p>
         </div>
 
@@ -646,6 +662,7 @@ const css = `
     }
   }
 `;
+
 
 
 
