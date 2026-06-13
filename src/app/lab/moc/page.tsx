@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
@@ -110,12 +110,18 @@ function StatCard({ title, value }: { title: string; value: number | string }) {
 export default function MocLabPage() {
   const [requests, setRequests] = useState<MocRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [actions, setActions] = useState<MocAction[]>([]);
   const [impacts, setImpacts] = useState<MocImpactReview[]>([]);
   const [approvals, setApprovals] = useState<MocApproval[]>([]);
   const [pssr, setPssr] = useState<MocPssr[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+
+  const filteredRequests = useMemo(() => {
+    if (statusFilter === "all") return requests;
+    return requests.filter((item) => item.status === statusFilter);
+  }, [requests, statusFilter]);
 
   const selectedRequest = useMemo(
     () => requests.find((item) => item.id === selectedId) || null,
@@ -220,6 +226,18 @@ export default function MocLabPage() {
     }
   }, [selectedId]);
 
+  useEffect(() => {
+    if (filteredRequests.length === 0) return;
+
+    const selectedStillVisible = filteredRequests.some(
+      (item) => item.id === selectedId
+    );
+
+    if (!selectedStillVisible) {
+      setSelectedId(filteredRequests[0].id);
+    }
+  }, [filteredRequests, selectedId]);
+
   return (
     <main style={{ padding: "32px", fontFamily: "Arial, sans-serif" }}>
       <div style={{ maxWidth: "1150px", margin: "0 auto" }}>
@@ -259,6 +277,49 @@ export default function MocLabPage() {
           </a>
         </div>
 
+        <div
+          style={{
+            marginTop: "22px",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "8px",
+            alignItems: "center",
+          }}
+        >
+          {[
+            { label: "All", value: "all" },
+            { label: "Draft", value: "draft" },
+            { label: "Impact Review", value: "impact_review" },
+            { label: "Action Tracking", value: "action_tracking" },
+            { label: "PSSR", value: "pssr" },
+            { label: "Approval", value: "approval" },
+            { label: "Implemented", value: "implemented" },
+            { label: "Closed", value: "closed" },
+          ].map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              onClick={() => setStatusFilter(filter.value)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "999px",
+                border:
+                  statusFilter === filter.value
+                    ? "1px solid #222"
+                    : "1px solid #ddd",
+                background: statusFilter === filter.value ? "#222" : "#fff",
+                color: statusFilter === filter.value ? "#fff" : "#333",
+                cursor: "pointer",
+              }}
+            >
+              {filter.label}
+            </button>
+          ))}
+
+          <span style={{ color: "#777", fontSize: "14px", marginLeft: "6px" }}>
+            Showing {filteredRequests.length} of {requests.length}
+          </span>
+        </div>
         {loading && (
           <p style={{ marginTop: "28px", color: "#777" }}>
             Loading MOC data...
@@ -324,7 +385,13 @@ export default function MocLabPage() {
                   MOC Requests
                 </h2>
 
-                {requests.map((item) => (
+                {filteredRequests.length === 0 && (
+                  <p style={{ color: "#777" }}>
+                    No MOC found for this filter.
+                  </p>
+                )}
+
+                {filteredRequests.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setSelectedId(item.id)}
