@@ -921,6 +921,43 @@ export default function MocDetailPage() {
               </p>
             </div>
 
+            <Card title="Lifecycle Progress">
+              <p style={{ color: "#555", marginTop: 0 }}>
+                Current status: <strong>{String(moc.status).replaceAll("_", " ")}</strong>
+              </p>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                  gap: "12px",
+                }}
+              >
+                {[
+                  { name: "Screening", done: !!screening },
+                  { name: "Impact Review", done: allImpactReviewsCompleted },
+                  { name: "Action Tracker", done: allActionsCompleted },
+                  { name: "PSSR", done: allPssrOk },
+                  { name: "Approval", done: approvedForImplementation },
+                  { name: "Closure", done: mocClosed },
+                ].map((step) => (
+                  <div
+                    key={step.name}
+                    style={{
+                      border: "1px solid #eee",
+                      borderRadius: "12px",
+                      padding: "12px",
+                      background: step.done ? "#fafafa" : "#fff",
+                    }}
+                  >
+                    <strong>{step.name}</strong>
+                    <div style={{ marginTop: "8px" }}>
+                      <Badge label={step.done ? "done" : "pending"} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
             <Card title="Request Detail">
               <div
                 style={{
