@@ -1204,6 +1204,57 @@ export default function MocDetailPage() {
               ))}
             </Card>
 
+            <Card title="PSSR Checklist">
+              <div style={{ marginBottom: "18px" }}>
+                <button
+                  type="button"
+                  disabled={pssr.length === 0 || allPssrOk}
+                  onClick={handleVerifyPssrAndMoveToApproval}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #222",
+                    background:
+                      pssr.length === 0 || allPssrOk ? "#777" : "#222",
+                    color: "#fff",
+                    cursor:
+                      pssr.length === 0 || allPssrOk
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {allPssrOk
+                    ? "PSSR Verified / Approval Ready"
+                    : "Mark All PSSR Items OK"}
+                </button>
+              </div>
+              {pssr.length === 0 && (
+                <p style={{ color: "#777" }}>No PSSR checklist yet.</p>
+              )}
+
+              {pssr.map((item) => (
+                <div
+                  key={item.id}
+                  style={{ padding: "12px 0", borderTop: "1px solid #eee" }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                    }}
+                  >
+                    <strong>{item.checklist_item}</strong>
+                    <Badge label={item.result} />
+                  </div>
+
+                  <p style={{ color: "#777", marginBottom: 0 }}>
+                    PIC: {item.responsible_person || "-"} · Due:{" "}
+                    {item.due_date || "-"}
+                  </p>
+                </div>
+              ))}
+            </Card>
             <Card title="Approvals">
               <div style={{ marginBottom: "18px" }}>
                 <button
@@ -1280,57 +1331,6 @@ export default function MocDetailPage() {
               ))}
             </Card>
 
-            <Card title="PSSR Checklist">
-              <div style={{ marginBottom: "18px" }}>
-                <button
-                  type="button"
-                  disabled={pssr.length === 0 || allPssrOk}
-                  onClick={handleVerifyPssrAndMoveToApproval}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "10px",
-                    border: "1px solid #222",
-                    background:
-                      pssr.length === 0 || allPssrOk ? "#777" : "#222",
-                    color: "#fff",
-                    cursor:
-                      pssr.length === 0 || allPssrOk
-                        ? "not-allowed"
-                        : "pointer",
-                  }}
-                >
-                  {allPssrOk
-                    ? "PSSR Verified / Approval Ready"
-                    : "Mark All PSSR Items OK"}
-                </button>
-              </div>
-              {pssr.length === 0 && (
-                <p style={{ color: "#777" }}>No PSSR checklist yet.</p>
-              )}
-
-              {pssr.map((item) => (
-                <div
-                  key={item.id}
-                  style={{ padding: "12px 0", borderTop: "1px solid #eee" }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: "12px",
-                    }}
-                  >
-                    <strong>{item.checklist_item}</strong>
-                    <Badge label={item.result} />
-                  </div>
-
-                  <p style={{ color: "#777", marginBottom: 0 }}>
-                    PIC: {item.responsible_person || "-"} · Due:{" "}
-                    {item.due_date || "-"}
-                  </p>
-                </div>
-              ))}
-            </Card>
           </>
         )}
       </div>
