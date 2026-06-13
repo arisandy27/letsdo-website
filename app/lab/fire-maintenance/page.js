@@ -141,6 +141,22 @@ export default async function FireMaintenancePage() {
             >
               Open Asset Register →
             </a>
+
+            <a
+              href="/lab/fire-maintenance/schedules"
+              style={{
+                display: "inline-flex",
+                background: "#0f172a",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginLeft: 10,
+              }}
+            >
+              Open Maintenance Schedule →
+            </a>
           </p>
         </div>
 
@@ -614,5 +630,6 @@ const css = `
     }
   }
 `;
+
 
 
