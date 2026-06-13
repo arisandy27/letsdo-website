@@ -382,6 +382,20 @@ export default function MocLabPage() {
                         <Badge label={selectedRequest.status} />
                         <Badge label={selectedRequest.risk_level} />
                         <Badge label={selectedRequest.priority} />
+
+                        <a
+                          href={`/lab/moc/${encodeURIComponent(selectedRequest.request_no)}`}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: "999px",
+                            background: "#222",
+                            color: "#fff",
+                            fontSize: "12px",
+                            textDecoration: "none",
+                          }}
+                        >
+                          Open Detail
+                        </a>
                       </div>
                     </div>
 
@@ -522,3 +536,4 @@ export default function MocLabPage() {
     </main>
   );
 }
+
