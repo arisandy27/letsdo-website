@@ -424,6 +424,111 @@ export default function MocDetailPage() {
     await loadDetail();
   }
 
+
+  async function handleGenerateActionTracker() {
+    if (!moc) return;
+
+    setMessage("");
+
+    if (actions.length > 0) {
+      setMessage("Action tracker already exists for this MOC.");
+      return;
+    }
+
+    const makeDueDate = (days: number) => {
+      const date = new Date();
+      date.setDate(date.getDate() + days);
+      return date.toISOString().slice(0, 10);
+    };
+
+    const defaultActions = [
+      {
+        moc_request_id: moc.id,
+        action_title: "Finalize impact review mitigation plan",
+        action_description:
+          "Review all impact review findings and confirm required mitigation before implementation.",
+        action_type: "verification",
+        responsible_person: "MOC Owner / HSE",
+        due_date: makeDueDate(7),
+        priority: "high",
+        status: "open",
+        remarks: "Generated automatically after impact review completion.",
+      },
+      {
+        moc_request_id: moc.id,
+        action_title: "Update related SOP, checklist, or controlled document",
+        action_description:
+          "Identify and update all procedures, layout, checklist, or other controlled documents affected by this change.",
+        action_type: "document_update",
+        responsible_person: "Document Control",
+        due_date: makeDueDate(10),
+        priority: "medium",
+        status: "open",
+        remarks: "Generated automatically after impact review completion.",
+      },
+      {
+        moc_request_id: moc.id,
+        action_title: "Conduct team briefing or training",
+        action_description:
+          "Brief affected workers or departments about the approved change, risk controls, and implementation requirements.",
+        action_type: "training",
+        responsible_person: "HSE / Area Owner",
+        due_date: makeDueDate(14),
+        priority: "medium",
+        status: "open",
+        remarks: "Generated automatically after impact review completion.",
+      },
+      {
+        moc_request_id: moc.id,
+        action_title: "Verify implementation readiness",
+        action_description:
+          "Verify that required resources, controls, documents, and responsible persons are ready before implementation.",
+        action_type: "verification",
+        responsible_person: "Area Owner",
+        due_date: makeDueDate(18),
+        priority: "high",
+        status: "open",
+        remarks: "Generated automatically after impact review completion.",
+      },
+      {
+        moc_request_id: moc.id,
+        action_title: "Prepare PSSR readiness items",
+        action_description:
+          "Prepare PSSR checklist items and evidence requirements before startup or final change activation.",
+        action_type: "inspection",
+        responsible_person: "HSE / Engineering",
+        due_date: makeDueDate(21),
+        priority: "medium",
+        status: "open",
+        remarks: "Generated automatically after impact review completion.",
+      },
+    ];
+
+    const { error: actionError } = await supabase
+      .from("moc_actions")
+      .insert(defaultActions);
+
+    if (actionError) {
+      setMessage("Failed to generate action tracker: " + actionError.message);
+      return;
+    }
+
+    const { error: mocUpdateError } = await supabase
+      .from("moc_requests")
+      .update({
+        status: "action_tracking",
+      })
+      .eq("id", moc.id);
+
+    if (mocUpdateError) {
+      setMessage("Action tracker generated, but failed to update MOC status: " + mocUpdateError.message);
+      return;
+    }
+
+    setMessage("Action tracker generated successfully.");
+    await loadDetail();
+  }
+
   useEffect(() => {
     loadDetail();
   }, [requestNo]);
@@ -672,6 +777,25 @@ export default function MocDetailPage() {
             </Card>
 
             <Card title="Action Tracker">
+              <div style={{ marginBottom: "18px" }}>
+                <button
+                  type="button"
+                  disabled={actions.length > 0}
+                  onClick={handleGenerateActionTracker}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #222",
+                    background: actions.length > 0 ? "#777" : "#222",
+                    color: "#fff",
+                    cursor: actions.length > 0 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {actions.length > 0
+                    ? "Action Tracker Ready"
+                    : "Generate Action Tracker"}
+                </button>
+              </div>
               {actions.length === 0 && (
                 <p style={{ color: "#777" }}>No action tracker yet.</p>
               )}
