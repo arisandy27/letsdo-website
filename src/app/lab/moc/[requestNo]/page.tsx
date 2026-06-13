@@ -80,6 +80,9 @@ export default function MocDetailPage() {
 
   const mocClosed = moc?.status === "closed";
 
+  const screeningLocked =
+    !!moc && !["draft", "submitted", "screening"].includes(moc.status);
+
   async function loadDetail() {
     if (!requestNo) return;
 
@@ -179,6 +182,15 @@ export default function MocDetailPage() {
 
   async function handleScreeningDecision(decision: string) {
     if (!moc) return;
+
+    const allowedScreeningStatuses = ["draft", "submitted", "screening"];
+
+    if (!allowedScreeningStatuses.includes(moc.status)) {
+      setMessage(
+        "Screening is locked because this MOC has moved beyond screening stage."
+      );
+      return;
+    }
 
     setMessage("");
 
@@ -972,14 +984,15 @@ export default function MocDetailPage() {
               >
                 <button
                   type="button"
+                  disabled={screeningLocked}
                   onClick={() => handleScreeningDecision("moc_required")}
                   style={{
                     padding: "10px 12px",
                     borderRadius: "10px",
                     border: "1px solid #222",
-                    background: "#222",
+                    background: screeningLocked ? "#777" : "#222",
                     color: "#fff",
-                    cursor: "pointer",
+                    cursor: screeningLocked ? "not-allowed" : "pointer",
                   }}
                 >
                   Accept as Full MOC
@@ -987,13 +1000,15 @@ export default function MocDetailPage() {
 
                 <button
                   type="button"
+                  disabled={screeningLocked}
                   onClick={() => handleScreeningDecision("not_moc")}
                   style={{
                     padding: "10px 12px",
                     borderRadius: "10px",
                     border: "1px solid #ddd",
-                    background: "#fff",
-                    cursor: "pointer",
+                    background: screeningLocked ? "#f2f2f2" : "#fff",
+                    color: screeningLocked ? "#888" : "#222",
+                    cursor: screeningLocked ? "not-allowed" : "pointer",
                   }}
                 >
                   Route as RIK / Non-MOC
@@ -1001,13 +1016,15 @@ export default function MocDetailPage() {
 
                 <button
                   type="button"
+                  disabled={screeningLocked}
                   onClick={() => handleScreeningDecision("need_more_review")}
                   style={{
                     padding: "10px 12px",
                     borderRadius: "10px",
                     border: "1px solid #ddd",
-                    background: "#fff",
-                    cursor: "pointer",
+                    background: screeningLocked ? "#f2f2f2" : "#fff",
+                    color: screeningLocked ? "#888" : "#222",
+                    cursor: screeningLocked ? "not-allowed" : "pointer",
                   }}
                 >
                   Need More Info
@@ -1015,26 +1032,31 @@ export default function MocDetailPage() {
 
                 <button
                   type="button"
+                  disabled={screeningLocked}
                   onClick={() => handleScreeningDecision("rejected")}
                   style={{
                     padding: "10px 12px",
                     borderRadius: "10px",
                     border: "1px solid #f0b5b5",
-                    background: "#fff5f5",
-                    color: "#9b1c1c",
-                    cursor: "pointer",
+                    background: screeningLocked ? "#f2f2f2" : "#fff5f5",
+                    color: screeningLocked ? "#888" : "#9b1c1c",
+                    cursor: screeningLocked ? "not-allowed" : "pointer",
                   }}
                 >
                   Reject
                 </button>
               </div>
+
+              {screeningLocked && (
+                <p style={{ color: "#777", marginTop: 0 }}>
+                  Screening is locked after this MOC moved beyond screening stage.
+                </p>
+              )}
+
               {screening ? (
-                <>
+                <div>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     <Badge label={screening.screening_result || "not screened"} />
-                    <Badge
-                      label={screening.moc_required ? "moc required" : "not required"}
-                    />
                   </div>
 
                   <p style={{ color: "#555", lineHeight: 1.6 }}>
@@ -1044,12 +1066,11 @@ export default function MocDetailPage() {
                   <p style={{ color: "#777" }}>
                     Screened by: {screening.screened_by_name || "-"}
                   </p>
-                </>
+                </div>
               ) : (
                 <p style={{ color: "#777" }}>No screening record yet.</p>
               )}
             </Card>
-
             <Card title="Impact Review">
               <div style={{ marginBottom: "18px" }}>
                 <button
