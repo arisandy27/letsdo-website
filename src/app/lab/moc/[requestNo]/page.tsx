@@ -256,7 +256,126 @@ export default function MocDetailPage() {
       return;
     }
 
-    setMessage("Screening saved: " + selected.label);
+    if (selected.result === "moc_required") {
+      const { data: existingImpactRows, error: existingImpactError } =
+        await supabase
+          .from("moc_impact_reviews")
+          .select("id")
+          .eq("moc_request_id", moc.id)
+          .limit(1);
+
+      if (existingImpactError) {
+        setMessage(
+          "Screening saved, but failed to check impact review: " +
+            existingImpactError.message
+        );
+        return;
+      }
+
+      if (!existingImpactRows || existingImpactRows.length === 0) {
+        const defaultImpactReviews = [
+          {
+            moc_request_id: moc.id,
+            review_area: "process_safety",
+            impact_description:
+              "Assess impact on process safety, chemical compatibility, operating envelope, safeguards, and MOC control.",
+            risk_before: "medium",
+            risk_after: "low",
+            mitigation_required: true,
+            mitigation_plan:
+              "Review process safety impact and define mitigation before implementation.",
+            review_status: "pending",
+            reviewed_by_name: null,
+          },
+          {
+            moc_request_id: moc.id,
+            review_area: "occupational_safety",
+            impact_description:
+              "Assess worker safety impact, access route, manual handling, exposure, and work execution risk.",
+            risk_before: "medium",
+            risk_after: "low",
+            mitigation_required: true,
+            mitigation_plan:
+              "Define safety controls, briefing needs, PPE, access control, and verification before implementation.",
+            review_status: "pending",
+            reviewed_by_name: null,
+          },
+          {
+            moc_request_id: moc.id,
+            review_area: "environment",
+            impact_description:
+              "Assess possible environmental impact, spill potential, waste generation, emission, and containment needs.",
+            risk_before: "medium",
+            risk_after: "low",
+            mitigation_required: true,
+            mitigation_plan:
+              "Confirm spill control, waste handling, and environmental compliance before implementation.",
+            review_status: "pending",
+            reviewed_by_name: null,
+          },
+          {
+            moc_request_id: moc.id,
+            review_area: "quality",
+            impact_description:
+              "Assess impact on product quality, specification, process consistency, and customer requirement.",
+            risk_before: "medium",
+            risk_after: "low",
+            mitigation_required: false,
+            mitigation_plan:
+              "Confirm whether quality validation, trial, or customer notification is required.",
+            review_status: "pending",
+            reviewed_by_name: null,
+          },
+          {
+            moc_request_id: moc.id,
+            review_area: "production",
+            impact_description:
+              "Assess production impact, downtime, operating method, scheduling, and handover requirement.",
+            risk_before: "medium",
+            risk_after: "low",
+            mitigation_required: true,
+            mitigation_plan:
+              "Coordinate implementation schedule, production readiness, and communication to affected team.",
+            review_status: "pending",
+            reviewed_by_name: null,
+          },
+          {
+            moc_request_id: moc.id,
+            review_area: "document_control",
+            impact_description:
+              "Assess required updates to SOP, layout, checklist, training material, and related controlled documents.",
+            risk_before: "medium",
+            risk_after: "low",
+            mitigation_required: true,
+            mitigation_plan:
+              "List all affected documents and complete revision before MOC closure.",
+            review_status: "pending",
+            reviewed_by_name: null,
+          },
+        ];
+
+        const { error: impactInsertError } = await supabase
+          .from("moc_impact_reviews")
+          .insert(defaultImpactReviews);
+
+        if (impactInsertError) {
+          setMessage(
+            "Screening saved, but failed to generate impact review: " +
+              impactInsertError.message
+          );
+          return;
+        }
+      }
+    }
+
+    setMessage(
+      selected.result === "moc_required"
+        ? "Screening saved: " +
+            selected.label +
+            ". Impact review checklist is ready."
+        : "Screening saved: " + selected.label
+    );
+
     await loadDetail();
   }
 
