@@ -59,6 +59,10 @@ export default function MocDetailPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
+  const allImpactReviewsCompleted =
+    impacts.length > 0 &&
+    impacts.every((item) => item.review_status === "completed");
+
   async function loadDetail() {
     if (!requestNo) return;
 
@@ -379,6 +383,47 @@ export default function MocDetailPage() {
     await loadDetail();
   }
 
+
+  async function handleCompleteImpactReviews() {
+    if (!moc) return;
+
+    setMessage("");
+
+    if (impacts.length === 0) {
+      setMessage("No impact review rows found. Accept as Full MOC first.");
+      return;
+    }
+
+    const { error: impactError } = await supabase
+      .from("moc_impact_reviews")
+      .update({
+        review_status: "completed",
+        reviewed_by_name: "Bobby Rachmat Arisandy",
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("moc_request_id", moc.id);
+
+    if (impactError) {
+      setMessage("Failed to complete impact reviews: " + impactError.message);
+      return;
+    }
+
+    const { error: mocUpdateError } = await supabase
+      .from("moc_requests")
+      .update({
+        status: "action_tracking",
+      })
+      .eq("id", moc.id);
+
+    if (mocUpdateError) {
+      setMessage("Failed to update MOC status: " + mocUpdateError.message);
+      return;
+    }
+
+    setMessage("Impact reviews completed. MOC moved to Action Tracking.");
+    await loadDetail();
+  }
+
   useEffect(() => {
     loadDetail();
   }, [requestNo]);
@@ -576,6 +621,25 @@ export default function MocDetailPage() {
             </Card>
 
             <Card title="Impact Review">
+              <div style={{ marginBottom: "18px" }}>
+                <button
+                  type="button"
+                  disabled={impacts.length === 0 || allImpactReviewsCompleted}
+                  onClick={handleCompleteImpactReviews}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #222",
+                    background: impacts.length === 0 || allImpactReviewsCompleted ? "#777" : "#222",
+                    color: "#fff",
+                    cursor: impacts.length === 0 || allImpactReviewsCompleted ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {allImpactReviewsCompleted
+                    ? "Impact Reviews Completed"
+                    : "Mark All Impact Reviews Completed"}
+                </button>
+              </div>
               {impacts.length === 0 && (
                 <p style={{ color: "#777" }}>No impact review yet.</p>
               )}
@@ -585,7 +649,17 @@ export default function MocDetailPage() {
                   key={item.id}
                   style={{ padding: "12px 0", borderTop: "1px solid #eee" }}
                 >
-                  <strong>{item.review_area.replaceAll("_", " ")}</strong>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      alignItems: "center",
+                    }}
+                  >
+                    <strong>{item.review_area.replaceAll("_", " ")}</strong>
+                    <Badge label={item.review_status || "pending"} />
+                  </div>
                   <p style={{ color: "#555", lineHeight: 1.6 }}>
                     {item.impact_description || "-"}
                   </p>
