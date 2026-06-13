@@ -63,6 +63,10 @@ export default function MocDetailPage() {
     impacts.length > 0 &&
     impacts.every((item) => item.review_status === "completed");
 
+  const allActionsCompleted =
+    actions.length > 0 &&
+    actions.every((item) => item.status === "completed");
+
   async function loadDetail() {
     if (!requestNo) return;
 
@@ -529,6 +533,154 @@ export default function MocDetailPage() {
     await loadDetail();
   }
 
+
+  async function handleCompleteActionsAndGeneratePssr() {
+    if (!moc) return;
+
+    setMessage("");
+
+    if (actions.length === 0) {
+      setMessage("No action tracker rows found. Generate Action Tracker first.");
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const { error: actionUpdateError } = await supabase
+      .from("moc_actions")
+      .update({
+        status: "completed",
+        completion_date: today,
+      })
+      .eq("moc_request_id", moc.id);
+
+    if (actionUpdateError) {
+      setMessage("Failed to complete action tracker: " + actionUpdateError.message);
+      return;
+    }
+
+    const { data: existingPssrRows, error: existingPssrError } = await supabase
+      .from("moc_pssr_checklists")
+      .select("id")
+      .eq("moc_request_id", moc.id)
+      .limit(1);
+
+    if (existingPssrError) {
+      setMessage(
+        "Actions completed, but failed to check PSSR checklist: " +
+          existingPssrError.message
+      );
+      return;
+    }
+
+    if (!existingPssrRows || existingPssrRows.length === 0) {
+      const makeDueDate = (days: number) => {
+        const date = new Date();
+        date.setDate(date.getDate() + days);
+        return date.toISOString().slice(0, 10);
+      };
+
+      const defaultPssrItems = [
+        {
+          moc_request_id: moc.id,
+          checklist_item: "Verify approved change implementation is complete",
+          category: "engineering",
+          is_required: true,
+          result: "pending",
+          corrective_action:
+            "Confirm field implementation matches approved MOC scope.",
+          responsible_person: "Area Owner / Engineering",
+          due_date: makeDueDate(3),
+        },
+        {
+          moc_request_id: moc.id,
+          checklist_item: "Verify updated SOP, checklist, and controlled documents are available",
+          category: "document",
+          is_required: true,
+          result: "pending",
+          corrective_action:
+            "Ensure all affected documents are updated and available to users.",
+          responsible_person: "Document Control",
+          due_date: makeDueDate(3),
+        },
+        {
+          moc_request_id: moc.id,
+          checklist_item: "Verify training or briefing has been completed",
+          category: "training",
+          is_required: true,
+          result: "pending",
+          corrective_action:
+            "Attach briefing/training evidence before startup authorization.",
+          responsible_person: "HSE / Area Owner",
+          due_date: makeDueDate(5),
+        },
+        {
+          moc_request_id: moc.id,
+          checklist_item: "Verify safety controls are in place",
+          category: "safety",
+          is_required: true,
+          result: "pending",
+          corrective_action:
+            "Confirm required safety controls, signage, access, PPE, and safeguards.",
+          responsible_person: "HSE",
+          due_date: makeDueDate(5),
+        },
+        {
+          moc_request_id: moc.id,
+          checklist_item: "Verify environmental and spill controls are ready",
+          category: "environment",
+          is_required: true,
+          result: "pending",
+          corrective_action:
+            "Confirm spill kit, containment, waste handling, and environmental controls.",
+          responsible_person: "HSE / Environment",
+          due_date: makeDueDate(5),
+        },
+        {
+          moc_request_id: moc.id,
+          checklist_item: "Startup or change activation authorization",
+          category: "general",
+          is_required: true,
+          result: "pending",
+          corrective_action:
+            "Authorize startup or activation only after all required PSSR items are verified.",
+          responsible_person: "Plant Manager / Area Owner",
+          due_date: makeDueDate(7),
+        },
+      ];
+
+      const { error: pssrInsertError } = await supabase
+        .from("moc_pssr_checklists")
+        .insert(defaultPssrItems);
+
+      if (pssrInsertError) {
+        setMessage(
+          "Actions completed, but failed to generate PSSR checklist: " +
+            pssrInsertError.message
+        );
+        return;
+      }
+    }
+
+    const { error: mocUpdateError } = await supabase
+      .from("moc_requests")
+      .update({
+        status: "pssr",
+      })
+      .eq("id", moc.id);
+
+    if (mocUpdateError) {
+      setMessage(
+        "PSSR checklist generated, but failed to update MOC status: " +
+          mocUpdateError.message
+      );
+      return;
+    }
+
+    setMessage("Actions completed. PSSR checklist is ready.");
+    await loadDetail();
+  }
+
   useEffect(() => {
     loadDetail();
   }, [requestNo]);
@@ -794,6 +946,36 @@ export default function MocDetailPage() {
                   {actions.length > 0
                     ? "Action Tracker Ready"
                     : "Generate Action Tracker"}
+                </button>
+              </div>
+              <div style={{ marginBottom: "18px" }}>
+                <button
+                  type="button"
+                  disabled={
+                    actions.length === 0 ||
+                    (allActionsCompleted && pssr.length > 0)
+                  }
+                  onClick={handleCompleteActionsAndGeneratePssr}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #222",
+                    background:
+                      actions.length === 0 ||
+                      (allActionsCompleted && pssr.length > 0)
+                        ? "#777"
+                        : "#222",
+                    color: "#fff",
+                    cursor:
+                      actions.length === 0 ||
+                      (allActionsCompleted && pssr.length > 0)
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {allActionsCompleted && pssr.length > 0
+                    ? "Actions Completed / PSSR Ready"
+                    : "Mark All Actions Completed & Generate PSSR"}
                 </button>
               </div>
               {actions.length === 0 && (
