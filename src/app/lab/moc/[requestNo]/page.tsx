@@ -71,6 +71,13 @@ export default function MocDetailPage() {
     pssr.length > 0 &&
     pssr.every((item) => item.result === "ok");
 
+  const approvedForImplementation =
+    approvals.some(
+      (item) =>
+        item.approval_stage === "pssr_approval" &&
+        item.decision === "approved"
+    ) || moc?.status === "implemented";
+
   async function loadDetail() {
     if (!requestNo) return;
 
@@ -729,6 +736,63 @@ export default function MocDetailPage() {
     await loadDetail();
   }
 
+
+  async function handleApproveMocForImplementation() {
+    if (!moc) return;
+
+    setMessage("");
+
+    if (!allPssrOk) {
+      setMessage("PSSR must be verified before approval.");
+      return;
+    }
+
+    const existingPssrApproval = approvals.find(
+      (item) => item.approval_stage === "pssr_approval"
+    );
+
+    const approvalPayload = {
+      moc_request_id: moc.id,
+      approval_stage: "pssr_approval",
+      approver_role: "Approver",
+      approver_name: "Bobby Rachmat Arisandy",
+      decision: "approved",
+      decision_notes:
+        "Approved for implementation from LetsDo Lab approval gate.",
+      decided_at: new Date().toISOString(),
+    };
+
+    const approvalResponse = existingPssrApproval?.id
+      ? await supabase
+          .from("moc_approvals")
+          .update(approvalPayload)
+          .eq("id", existingPssrApproval.id)
+      : await supabase.from("moc_approvals").insert(approvalPayload);
+
+    if (approvalResponse.error) {
+      setMessage("Failed to save approval: " + approvalResponse.error.message);
+      return;
+    }
+
+    const { error: mocUpdateError } = await supabase
+      .from("moc_requests")
+      .update({
+        status: "implemented",
+      })
+      .eq("id", moc.id);
+
+    if (mocUpdateError) {
+      setMessage(
+        "Approval saved, but failed to update MOC status: " +
+          mocUpdateError.message
+      );
+      return;
+    }
+
+    setMessage("MOC approved for implementation.");
+    await loadDetail();
+  }
+
   useEffect(() => {
     loadDetail();
   }, [requestNo]);
@@ -1059,6 +1123,31 @@ export default function MocDetailPage() {
             </Card>
 
             <Card title="Approvals">
+              <div style={{ marginBottom: "18px" }}>
+                <button
+                  type="button"
+                  disabled={!allPssrOk || approvedForImplementation}
+                  onClick={handleApproveMocForImplementation}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #222",
+                    background:
+                      !allPssrOk || approvedForImplementation
+                        ? "#777"
+                        : "#222",
+                    color: "#fff",
+                    cursor:
+                      !allPssrOk || approvedForImplementation
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {approvedForImplementation
+                    ? "Approved for Implementation"
+                    : "Approve MOC for Implementation"}
+                </button>
+              </div>
               {approvals.length === 0 && (
                 <p style={{ color: "#777" }}>No approval record yet.</p>
               )}
