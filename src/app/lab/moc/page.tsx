@@ -242,6 +242,23 @@ export default function MocLabPage() {
           </p>
         </div>
 
+        <div style={{ marginTop: "18px" }}>
+          <a
+            href="/lab/moc/new"
+            style={{
+              display: "inline-block",
+              padding: "11px 16px",
+              borderRadius: "10px",
+              background: "#222",
+              color: "#fff",
+              textDecoration: "none",
+              fontSize: "14px",
+            }}
+          >
+            + New MOC Request
+          </a>
+        </div>
+
         {loading && (
           <p style={{ marginTop: "28px", color: "#777" }}>
             Loading MOC data...
