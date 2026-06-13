@@ -155,6 +155,111 @@ export default function MocDetailPage() {
     setLoading(false);
   }
 
+
+  async function handleScreeningDecision(decision: string) {
+    if (!moc) return;
+
+    setMessage("");
+
+    const decisionMap: Record<
+      string,
+      {
+        result: string;
+        mocRequired: boolean;
+        requestStatus: string;
+        label: string;
+        notes: string;
+      }
+    > = {
+      moc_required: {
+        result: "moc_required",
+        mocRequired: true,
+        requestStatus: "impact_review",
+        label: "Accepted as Full MOC",
+        notes:
+          "Screening decision: accepted as Full MOC. Continue to impact review.",
+      },
+      not_moc: {
+        result: "not_moc",
+        mocRequired: false,
+        requestStatus: "closed",
+        label: "Routed as RIK / Non-MOC",
+        notes:
+          "Screening decision: routed as RIK / Non-MOC. Full MOC workflow is not required.",
+      },
+      need_more_review: {
+        result: "need_more_review",
+        mocRequired: false,
+        requestStatus: "screening",
+        label: "Need More Info",
+        notes:
+          "Screening decision: more information is required before final decision.",
+      },
+      rejected: {
+        result: "rejected",
+        mocRequired: false,
+        requestStatus: "rejected",
+        label: "Rejected",
+        notes:
+          "Screening decision: rejected. Request will not continue to MOC workflow.",
+      },
+    };
+
+    const selected = decisionMap[decision];
+
+    if (!selected) {
+      setMessage("Invalid screening decision.");
+      return;
+    }
+
+    const payload = {
+      moc_request_id: moc.id,
+      affects_process_safety: selected.result === "moc_required",
+      affects_hse: selected.result === "moc_required",
+      affects_quality: false,
+      affects_equipment: false,
+      affects_material: false,
+      affects_procedure: selected.result === "moc_required",
+      affects_people_org: false,
+      affects_legal_compliance: selected.result === "moc_required",
+      moc_required: selected.mocRequired,
+      screening_result: selected.result,
+      screening_notes: selected.notes,
+      screened_by_name: "Bobby Rachmat Arisandy",
+      screened_at: new Date().toISOString(),
+    };
+
+    const screeningResponse = screening?.id
+      ? await supabase
+          .from("moc_screenings")
+          .update(payload)
+          .eq("id", screening.id)
+      : await supabase.from("moc_screenings").insert(payload);
+
+    if (screeningResponse.error) {
+      setMessage(
+        "Failed to save screening decision: " +
+          screeningResponse.error.message
+      );
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from("moc_requests")
+      .update({
+        status: selected.requestStatus,
+      })
+      .eq("id", moc.id);
+
+    if (updateError) {
+      setMessage("Failed to update MOC status: " + updateError.message);
+      return;
+    }
+
+    setMessage("Screening saved: " + selected.label);
+    await loadDetail();
+  }
+
   useEffect(() => {
     loadDetail();
   }, [requestNo]);
@@ -263,6 +368,72 @@ export default function MocDetailPage() {
             </Card>
 
             <Card title="Screening">
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                  marginBottom: "18px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleScreeningDecision("moc_required")}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #222",
+                    background: "#222",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Accept as Full MOC
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleScreeningDecision("not_moc")}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #ddd",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Route as RIK / Non-MOC
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleScreeningDecision("need_more_review")}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #ddd",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Need More Info
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleScreeningDecision("rejected")}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #f0b5b5",
+                    background: "#fff5f5",
+                    color: "#9b1c1c",
+                    cursor: "pointer",
+                  }}
+                >
+                  Reject
+                </button>
+              </div>
               {screening ? (
                 <>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
