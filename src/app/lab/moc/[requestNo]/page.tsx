@@ -873,9 +873,31 @@ export default function MocDetailPage() {
   return (
     <main style={{ padding: "32px", fontFamily: "Arial, sans-serif" }}>
       <div style={{ maxWidth: "1050px", margin: "0 auto" }}>
-        <a href="/lab/moc" style={{ color: "#555", textDecoration: "none" }}>
-          ← Back to MOC Dashboard
-        </a>
+                <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <a href="/lab/moc" style={{ color: "#555", textDecoration: "none" }}>
+            ← Back to MOC Dashboard
+          </a>
+
+          <a
+            href={`/lab/moc/${encodeURIComponent(requestNo)}/print`}
+            style={{
+              color: "#555",
+              textDecoration: "none",
+              padding: "8px 12px",
+              border: "1px solid #ddd",
+              borderRadius: "10px",
+            }}
+          >
+            Print Summary
+          </a>
+        </div>
 
         {loading && (
           <p style={{ marginTop: "28px", color: "#777" }}>
