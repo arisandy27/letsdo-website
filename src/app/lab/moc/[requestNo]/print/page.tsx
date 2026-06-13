@@ -46,6 +46,7 @@ export default function MocPrintPage() {
   const [actions, setActions] = useState<any[]>([]);
   const [approvals, setApprovals] = useState<any[]>([]);
   const [pssr, setPssr] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -137,11 +138,24 @@ export default function MocPrintPage() {
       return;
     }
 
+    const { data: attachmentData, error: attachmentError } = await supabase
+      .from("moc_attachments")
+      .select("*")
+      .eq("moc_request_id", mocData.id)
+      .order("created_at", { ascending: false });
+
+    if (attachmentError) {
+      setMessage("Attachment error: " + attachmentError.message);
+      setLoading(false);
+      return;
+    }
+
     setScreening(screeningResult.data || null);
     setImpacts(impactsResult.data || []);
     setActions(actionsResult.data || []);
     setApprovals(approvalsResult.data || []);
     setPssr(pssrResult.data || []);
+    setAttachments(attachmentData || []);
     setLoading(false);
   }
 
@@ -407,6 +421,37 @@ export default function MocPrintPage() {
               ))}
             </PrintSection>
 
+            <PrintSection title="7. Attachments / Evidence">
+              {attachments.length === 0 && <p>No attachment record.</p>}
+
+              {attachments.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: "10px 0",
+                    borderBottom: "1px solid #eee",
+                  }}
+                >
+                  <strong>{item.file_name}</strong>
+
+                  <p style={{ margin: "6px 0", color: "#666" }}>
+                    Step: {String(item.step_key || "-").replaceAll("_", " ")}
+                    {" · "}
+                    Uploaded by: {item.uploaded_by_name || "-"}
+                  </p>
+
+                  {item.notes && (
+                    <p style={{ margin: "6px 0", color: "#666" }}>
+                      Notes: {item.notes}
+                    </p>
+                  )}
+
+                  <p style={{ margin: 0, color: "#777", fontSize: "12px" }}>
+                    Storage path: {item.storage_path}
+                  </p>
+                </div>
+              ))}
+            </PrintSection>
             <footer
               style={{
                 borderTop: "1px solid #ddd",
