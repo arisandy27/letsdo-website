@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -58,17 +59,60 @@ async function createEvidence(formData) {
     redirect("/lab/fire-maintenance/evidence?error=env");
   }
 
+  const projectId = formData.get("project_id");
+  const uploadedFile = formData.get("evidence_file");
+
+  let fileName = formData.get("file_name") || null;
+  let filePath = formData.get("file_path") || null;
+  let fileUrl = formData.get("file_url") || null;
+  let mimeType = null;
+  let fileSize = null;
+
+  if (uploadedFile && uploadedFile.size > 0) {
+    const originalName = uploadedFile.name || "evidence-file";
+    const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const generatedPath =
+      "fire-maintenance/evidence/" +
+      projectId +
+      "/" +
+      Date.now() +
+      "-" +
+      safeName;
+
+    const arrayBuffer = await uploadedFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const { error: uploadError } = await supabase.storage
+      .from("lab-files")
+      .upload(generatedPath, buffer, {
+        contentType: uploadedFile.type || "application/octet-stream",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      redirect("/lab/fire-maintenance/evidence?error=upload");
+    }
+
+    fileName = originalName;
+    filePath = generatedPath;
+    fileUrl = null;
+    mimeType = uploadedFile.type || null;
+    fileSize = uploadedFile.size || null;
+  }
+
   const { error } = await supabase.from("fire_attachments").insert({
-    project_id: formData.get("project_id"),
+    project_id: projectId,
     reference_type: formData.get("reference_type") || "project",
     evidence_type: formData.get("evidence_type") || "photo",
     report_type: formData.get("report_type") || null,
     report_month: monthInputToDate(formData.get("report_month")),
     title: formData.get("title") || "-",
     description: formData.get("description") || null,
-    file_name: formData.get("file_name") || null,
-    file_url: formData.get("file_url") || null,
-    file_path: formData.get("file_path") || null,
+    file_name: fileName,
+    file_url: fileUrl,
+    file_path: filePath,
+    mime_type: mimeType,
+    file_size: fileSize,
     uploaded_by: formData.get("uploaded_by") || "Fire Kelas A Support",
   });
 
@@ -111,9 +155,30 @@ async function loadPageData() {
 
   if (error) return { error: error.message };
 
+  const rawAttachments = attachmentsRes.data || [];
+
+  const attachments = await Promise.all(
+    rawAttachments.map(async (item) => {
+      let signedUrl = item.file_url || null;
+
+      if (!signedUrl && item.file_path) {
+        const { data: signedData } = await supabase.storage
+          .from(item.storage_bucket || "lab-files")
+          .createSignedUrl(item.file_path, 60 * 60);
+
+        signedUrl = signedData?.signedUrl || null;
+      }
+
+      return {
+        ...item,
+        signed_url: signedUrl,
+      };
+    })
+  );
+
   return {
     project: projectRes.data,
-    attachments: attachmentsRes.data || [],
+    attachments,
     summary: summaryRes.data || [],
   };
 }
@@ -173,7 +238,7 @@ export default async function FireEvidencePage({ searchParams }) {
       </section>
 
       {created && <div className="success-box">Evidence berhasil disimpan.</div>}
-      {error && <div className="error-box">Ada error saat menyimpan evidence.</div>}
+      {error && <div className="error-box">Ada error saat menyimpan/upload evidence. Pastikan bucket lab-files tersedia.</div>}
 
       <section className="kpi-grid">
         <div className="kpi-card">
@@ -205,7 +270,7 @@ export default async function FireEvidencePage({ searchParams }) {
         <form action={createEvidence} className="panel">
           <div className="panel-head">
             <h2>New Evidence</h2>
-            <p>Input manual evidence dulu. Upload file langsung kita buat tahap berikutnya.</p>
+            <p>Upload evidence file langsung ke Supabase Storage atau input manual URL/path bila file sudah tersedia.</p>
           </div>
 
           <input type="hidden" name="project_id" value={project?.id || ""} />
@@ -264,11 +329,20 @@ export default async function FireEvidencePage({ searchParams }) {
           </label>
 
           <label>
+            Upload File
+            <input
+              type="file"
+              name="evidence_file"
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+            />
+          </label>
+
+          <label>
             File Name
             <input
               type="text"
               name="file_name"
-              placeholder="Contoh: fm200-pressure-june-2026.jpg"
+              placeholder="Optional bila tidak upload file"
             />
           </label>
 
@@ -336,13 +410,13 @@ export default async function FireEvidencePage({ searchParams }) {
                   File: {item.file_name || "-"}
                 </div>
 
-                {item.file_url && (
-                  <a className="file-link" href={item.file_url} target="_blank">
+                {item.signed_url && (
+                  <a className="file-link" href={item.signed_url} target="_blank">
                     Open File →
                   </a>
                 )}
 
-                {!item.file_url && item.file_path && (
+                {item.file_path && (
                   <div className="file-path">Path: {item.file_path}</div>
                 )}
 
@@ -639,3 +713,6 @@ const css = `
     }
   }
 `;
+
+
+

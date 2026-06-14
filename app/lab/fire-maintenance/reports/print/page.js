@@ -180,7 +180,24 @@ async function loadPrintData() {
     findings: findingsRes.data || [],
     trainings: trainingsRes.data || [],
     latestReport: reportsRes.data?.[0] || null,
-    attachments: attachmentsRes.data || [],
+    attachments: await Promise.all(
+      (attachmentsRes.data || []).map(async (item) => {
+        let signedUrl = item.file_url || null;
+
+        if (!signedUrl && item.file_path) {
+          const { data: signedData } = await supabase.storage
+            .from(item.storage_bucket || "lab-files")
+            .createSignedUrl(item.file_path, 60 * 60);
+
+          signedUrl = signedData?.signedUrl || null;
+        }
+
+        return {
+          ...item,
+          signed_url: signedUrl,
+        };
+      })
+    ),
   };
 }
 
@@ -551,8 +568,8 @@ export default async function FirePrintableReportPage({ searchParams }) {
                 <td>{item.report_type || "-"}</td>
                 <td>{formatMonth(item.report_month)}</td>
                 <td>
-                  {item.file_url ? (
-                    <a href={item.file_url} target="_blank">
+                  {item.signed_url ? (
+                    <a href={item.signed_url} target="_blank">
                       {item.file_name || "Open file"}
                     </a>
                   ) : (
@@ -877,6 +894,7 @@ const css = `
     }
   }
 `;
+
 
 
 
