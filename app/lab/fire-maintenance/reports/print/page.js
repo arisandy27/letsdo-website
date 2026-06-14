@@ -72,8 +72,25 @@ function frequencyOrder(value) {
   return order[value] || 99;
 }
 
+function formatMonth(value) {
+  if (!value) return "-";
+  const text = String(value);
+  if (text.length < 7) return text;
+  return `${text.slice(5, 7)}/${text.slice(0, 4)}`;
+}
+
 function statusText(value) {
   return String(value || "-").replaceAll("_", " ");
+}
+
+function includeEvidenceInReport(item, type) {
+  const reportType = item.report_type;
+
+  // General evidence without report_type will appear in all reports.
+  if (!reportType) return true;
+
+  // Report-specific evidence only appears in the matching report type.
+  return reportType === type;
 }
 
 async function loadPrintData() {
@@ -95,6 +112,7 @@ async function loadPrintData() {
     findingsRes,
     trainingsRes,
     reportsRes,
+    attachmentsRes,
   ] = await Promise.all([
     supabase
       .from("fire_projects")
@@ -134,6 +152,10 @@ async function loadPrintData() {
       .select("*")
       .order("report_month", { ascending: false })
       .limit(1),
+    supabase
+      .from("fire_attachments")
+      .select("*")
+      .order("created_at", { ascending: false }),
   ]);
 
   const error =
@@ -144,7 +166,8 @@ async function loadPrintData() {
     inspectionsRes.error ||
     findingsRes.error ||
     trainingsRes.error ||
-    reportsRes.error;
+    reportsRes.error ||
+    attachmentsRes.error;
 
   if (error) return { error: error.message };
 
@@ -157,6 +180,7 @@ async function loadPrintData() {
     findings: findingsRes.data || [],
     trainings: trainingsRes.data || [],
     latestReport: reportsRes.data?.[0] || null,
+    attachments: attachmentsRes.data || [],
   };
 }
 
@@ -186,6 +210,7 @@ export default async function FirePrintableReportPage({ searchParams }) {
     findings,
     trainings,
     latestReport,
+    attachments,
   } = data;
 
   const included = includedFrequencies(type);
@@ -215,6 +240,10 @@ export default async function FirePrintableReportPage({ searchParams }) {
 
   const doneSchedules = schedules.filter((item) => item.status === "done");
   const overdueSchedules = schedules.filter((item) => item.status === "overdue");
+
+  const reportAttachments = attachments.filter((item) =>
+    includeEvidenceInReport(item, type)
+  );
 
   return (
     <main className="page">
@@ -496,7 +525,55 @@ export default async function FirePrintableReportPage({ searchParams }) {
       </section>
 
       <section className="section">
-        <h2>7. Recommendation</h2>
+        <h2>7. Evidence / Attachments</h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Title</th>
+              <th>Reference</th>
+              <th>Evidence Type</th>
+              <th>Report</th>
+              <th>Month</th>
+              <th>File</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {reportAttachments.map((item, index) => (
+              <tr key={item.id}>
+                <td>{index + 1}</td>
+                <td>{item.title || "-"}</td>
+                <td>{item.reference_type || "-"}</td>
+                <td>{statusText(item.evidence_type)}</td>
+                <td>{item.report_type || "-"}</td>
+                <td>{formatMonth(item.report_month)}</td>
+                <td>
+                  {item.file_url ? (
+                    <a href={item.file_url} target="_blank">
+                      {item.file_name || "Open file"}
+                    </a>
+                  ) : (
+                    item.file_name || item.file_path || "-"
+                  )}
+                </td>
+                <td>{item.description || "-"}</td>
+              </tr>
+            ))}
+
+            {reportAttachments.length === 0 && (
+              <tr>
+                <td colSpan="8">No evidence / attachment registered.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="section">
+        <h2>8. Recommendation</h2>
 
         <div className="summary-box">
           {openFindings.length > 0 ? (
@@ -800,4 +877,6 @@ const css = `
     }
   }
 `;
+
+
 
