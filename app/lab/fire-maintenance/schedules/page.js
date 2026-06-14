@@ -1,5 +1,7 @@
 ﻿import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,10 @@ function getSupabaseClient() {
   });
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function formatDate(value) {
   if (!value) return "-";
   const text = String(value);
@@ -31,7 +37,97 @@ function badgeClass(value) {
   return `badge ${key}`;
 }
 
-async function loadSchedules() {
+async function saveSchedule(formData) {
+  "use server";
+
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    redirect("/lab/fire-maintenance/schedules?error=env");
+  }
+
+  const projectId = formData.get("project_id");
+  const scheduleId = formData.get("schedule_id");
+
+  if (!projectId) {
+    redirect("/lab/fire-maintenance/schedules?error=project");
+  }
+
+  const frequency = formData.get("frequency") || "monthly";
+
+  const payload = {
+    project_id: projectId,
+    asset_id: formData.get("asset_id") || null,
+    scope_template_id: formData.get("scope_template_id") || null,
+    schedule_code: formData.get("schedule_code"),
+    activity_type: formData.get("activity_type"),
+    frequency,
+    report_frequency: frequency,
+    planned_date: formData.get("planned_date") || todayIso(),
+    actual_date: formData.get("actual_date") || null,
+    assigned_to: formData.get("assigned_to") || null,
+    status: formData.get("status") || "planned",
+    notes: formData.get("notes") || null,
+  };
+
+  if (scheduleId) {
+    const { error } = await supabase
+      .from("fire_maintenance_schedules")
+      .update(payload)
+      .eq("id", scheduleId);
+
+    if (error) {
+      redirect("/lab/fire-maintenance/schedules?error=update");
+    }
+
+    revalidatePath("/lab/fire-maintenance/schedules");
+    revalidatePath("/lab/fire-maintenance");
+    redirect("/lab/fire-maintenance/schedules?updated=1");
+  }
+
+  const { error } = await supabase
+    .from("fire_maintenance_schedules")
+    .insert(payload);
+
+  if (error) {
+    redirect("/lab/fire-maintenance/schedules?error=insert");
+  }
+
+  revalidatePath("/lab/fire-maintenance/schedules");
+  revalidatePath("/lab/fire-maintenance");
+  redirect("/lab/fire-maintenance/schedules?created=1");
+}
+
+async function deleteSchedule(formData) {
+  "use server";
+
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    redirect("/lab/fire-maintenance/schedules?error=env");
+  }
+
+  const scheduleId = formData.get("schedule_id");
+
+  if (!scheduleId) {
+    redirect("/lab/fire-maintenance/schedules?error=delete");
+  }
+
+  const { error } = await supabase
+    .from("fire_maintenance_schedules")
+    .delete()
+    .eq("id", scheduleId);
+
+  if (error) {
+    redirect("/lab/fire-maintenance/schedules?error=delete");
+  }
+
+  revalidatePath("/lab/fire-maintenance/schedules");
+  revalidatePath("/lab/fire-maintenance");
+  redirect("/lab/fire-maintenance/schedules?deleted=1");
+}
+
+async function loadPageData() {
   const supabase = getSupabaseClient();
 
   if (!supabase) {
@@ -41,18 +137,47 @@ async function loadSchedules() {
     };
   }
 
-  const { data, error } = await supabase
-    .from("fire_maintenance_schedules")
-    .select("*, fire_assets(asset_code, asset_name, asset_type, area), fire_projects(project_name, client_name, vendor_name, site_name)")
-    .order("planned_date", { ascending: true });
+  const [projectRes, assetsRes, scopesRes, schedulesRes] = await Promise.all([
+    supabase
+      .from("fire_projects")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("fire_assets")
+      .select("*")
+      .order("asset_code", { ascending: true }),
+    supabase
+      .from("fire_scope_templates")
+      .select("*")
+      .eq("active", true)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("fire_maintenance_schedules")
+      .select("*, fire_assets(asset_code, asset_name, asset_type, area), fire_projects(project_name, client_name, vendor_name, site_name), fire_scope_templates(frequency, system_group, scope_title)")
+      .order("planned_date", { ascending: true }),
+  ]);
+
+  const error =
+    projectRes.error ||
+    assetsRes.error ||
+    scopesRes.error ||
+    schedulesRes.error;
 
   if (error) return { error: error.message };
 
-  return { schedules: data || [] };
+  return {
+    project: projectRes.data,
+    assets: assetsRes.data || [],
+    scopes: scopesRes.data || [],
+    schedules: schedulesRes.data || [],
+  };
 }
 
-export default async function FireMaintenanceSchedulePage() {
-  const data = await loadSchedules();
+export default async function FireMaintenanceSchedulePage({ searchParams }) {
+  const params = await searchParams;
+  const data = await loadPageData();
 
   if (data.error) {
     return (
@@ -66,11 +191,19 @@ export default async function FireMaintenanceSchedulePage() {
     );
   }
 
-  const schedules = data.schedules || [];
+  const { project, assets, scopes, schedules } = data;
+
+  const editingSchedule =
+    schedules.find((item) => item.id === params?.edit) || null;
+
+  const created = params?.created;
+  const updated = params?.updated;
+  const deleted = params?.deleted;
+  const error = params?.error;
+
   const planned = schedules.filter((item) => item.status === "planned");
   const overdue = schedules.filter((item) => item.status === "overdue");
   const done = schedules.filter((item) => item.status === "done");
-  const project = schedules[0]?.fire_projects || {};
 
   return (
     <main className="page">
@@ -85,19 +218,24 @@ export default async function FireMaintenanceSchedulePage() {
           <div className="eyebrow">Fire Maintenance Pro</div>
           <h1>Maintenance Schedule</h1>
           <p>
-            Jadwal inspeksi dan maintenance fire protection untuk visit bulanan,
-            K3 inspection, corrective action, dan monthly report.
+            Jadwal inspeksi dan maintenance fire protection untuk weekly, monthly,
+            3-month, 6-month, dan annual scope.
           </p>
         </div>
 
         <div className="project-box">
           <div className="project-label">Project</div>
-          <div className="project-title">{project.project_name || "-"}</div>
-          <div className="project-meta">{project.site_name || "-"}</div>
-          <div className="project-meta">Client: {project.client_name || "-"}</div>
-          <div className="project-meta">Vendor: {project.vendor_name || "-"}</div>
+          <div className="project-title">{project?.project_name || "-"}</div>
+          <div className="project-meta">{project?.site_name || "-"}</div>
+          <div className="project-meta">Client: {project?.client_name || "-"}</div>
+          <div className="project-meta">Vendor: {project?.vendor_name || "-"}</div>
         </div>
       </section>
+
+      {created && <div className="success-box">Schedule baru berhasil dibuat.</div>}
+      {updated && <div className="success-box">Schedule berhasil diupdate.</div>}
+      {deleted && <div className="success-box">Schedule berhasil dihapus.</div>}
+      {error && <div className="error-box">Ada error saat memproses schedule.</div>}
 
       <section className="kpi-grid">
         <div className="kpi-card">
@@ -125,53 +263,216 @@ export default async function FireMaintenanceSchedulePage() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Maintenance Schedule List</h2>
-          <p>Schedule awal untuk fire alarm, CO2, FM-200, deluge, hydrant, dan APAR.</p>
-        </div>
+      <section className="two-col">
+        <form action={saveSchedule} className="panel">
+          <div className="panel-head">
+            <h2>{editingSchedule ? "Edit Schedule" : "Add New Schedule"}</h2>
+            <p>
+              {editingSchedule
+                ? "Update jadwal maintenance."
+                : "Tambahkan jadwal maintenance baru."}
+            </p>
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Planned Date</th>
-                <th>Actual Date</th>
-                <th>Schedule Code</th>
-                <th>Asset</th>
-                <th>Activity</th>
-                <th>Frequency</th>
-                <th>Assigned To</th>
-                <th>Status</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
+            {editingSchedule && (
+              <Link href="/lab/fire-maintenance/schedules" className="cancel-link">
+                Cancel Edit
+              </Link>
+            )}
+          </div>
 
-            <tbody>
-              {schedules.map((item) => (
-                <tr key={item.id}>
-                  <td>{formatDate(item.planned_date)}</td>
-                  <td>{formatDate(item.actual_date)}</td>
-                  <td>
-                    <strong>{item.schedule_code}</strong>
-                  </td>
-                  <td>
-                    <strong>{item.fire_assets?.asset_code || "-"}</strong>
-                    <br />
-                    <span>{item.fire_assets?.asset_name || "-"}</span>
-                  </td>
-                  <td>{item.activity_type}</td>
-                  <td>{item.frequency}</td>
-                  <td>{item.assigned_to || "-"}</td>
-                  <td>
-                    <span className={badgeClass(item.status)}>{item.status}</span>
-                  </td>
-                  <td>{item.notes || "-"}</td>
-                </tr>
+          <input type="hidden" name="project_id" value={project?.id || ""} />
+          <input type="hidden" name="schedule_id" value={editingSchedule?.id || ""} />
+
+          <label>
+            Schedule Code
+            <input
+              type="text"
+              name="schedule_code"
+              required
+              defaultValue={editingSchedule?.schedule_code || ""}
+              placeholder="Contoh: FMS-202606-008"
+            />
+          </label>
+
+          <label>
+            Asset
+            <select
+              name="asset_id"
+              defaultValue={editingSchedule?.asset_id || ""}
+            >
+              <option value="">No asset selected</option>
+              {assets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.asset_code} - {asset.asset_name}
+                </option>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </select>
+          </label>
+
+          <label>
+            Scope Template
+            <select
+              name="scope_template_id"
+              defaultValue={editingSchedule?.scope_template_id || ""}
+            >
+              <option value="">No scope template</option>
+              {scopes.map((scope) => (
+                <option key={scope.id} value={scope.id}>
+                  {scope.frequency} - {scope.system_group} - {scope.scope_title}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Activity Type
+            <input
+              type="text"
+              name="activity_type"
+              required
+              defaultValue={editingSchedule?.activity_type || ""}
+              placeholder="Contoh: Monthly Fire Alarm Panel Inspection"
+            />
+          </label>
+
+          <label>
+            Frequency
+            <select name="frequency" defaultValue={editingSchedule?.frequency || "monthly"}>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">3 Month / Quarterly</option>
+              <option value="semiannual">6 Month / Semiannual</option>
+              <option value="annual">Annual</option>
+            </select>
+          </label>
+
+          <label>
+            Planned Date
+            <input
+              type="date"
+              name="planned_date"
+              required
+              defaultValue={editingSchedule?.planned_date || todayIso()}
+            />
+          </label>
+
+          <label>
+            Actual Date
+            <input
+              type="date"
+              name="actual_date"
+              defaultValue={editingSchedule?.actual_date || ""}
+            />
+          </label>
+
+          <label>
+            Assigned To
+            <input
+              type="text"
+              name="assigned_to"
+              defaultValue={editingSchedule?.assigned_to || ""}
+              placeholder="Contoh: Vendor Team / Fire Kelas A Support"
+            />
+          </label>
+
+          <label>
+            Status
+            <select name="status" defaultValue={editingSchedule?.status || "planned"}>
+              <option value="planned">Planned</option>
+              <option value="overdue">Overdue</option>
+              <option value="done">Done</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+
+          <label>
+            Notes
+            <textarea
+              name="notes"
+              rows="3"
+              defaultValue={editingSchedule?.notes || ""}
+              placeholder="Catatan schedule, scope, atau remark lainnya..."
+            />
+          </label>
+
+          <button type="submit">
+            {editingSchedule ? "Update Schedule" : "Add Schedule"}
+          </button>
+        </form>
+
+        <section className="panel">
+          <div className="panel-head">
+            <h2>Maintenance Schedule List</h2>
+            <p>Schedule maintenance yang sudah terdaftar.</p>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Planned Date</th>
+                  <th>Actual Date</th>
+                  <th>Schedule Code</th>
+                  <th>Asset</th>
+                  <th>Scope</th>
+                  <th>Activity</th>
+                  <th>Frequency</th>
+                  <th>Assigned To</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {schedules.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <div className="actions">
+                        <Link
+                          href={`/lab/fire-maintenance/schedules?edit=${item.id}`}
+                          className="edit-link"
+                        >
+                          Edit
+                        </Link>
+
+                        <form action={deleteSchedule}>
+                          <input type="hidden" name="schedule_id" value={item.id} />
+                          <button type="submit" className="delete-button">
+                            Delete
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+
+                    <td>{formatDate(item.planned_date)}</td>
+                    <td>{formatDate(item.actual_date)}</td>
+                    <td>
+                      <strong>{item.schedule_code}</strong>
+                    </td>
+                    <td>
+                      <strong>{item.fire_assets?.asset_code || "-"}</strong>
+                      <br />
+                      <span>{item.fire_assets?.asset_name || "-"}</span>
+                    </td>
+                    <td>
+                      {item.fire_scope_templates?.system_group || "-"}
+                      <br />
+                      <span>{item.fire_scope_templates?.scope_title || "-"}</span>
+                    </td>
+                    <td>{item.activity_type}</td>
+                    <td>{item.frequency}</td>
+                    <td>{item.assigned_to || "-"}</td>
+                    <td>
+                      <span className={badgeClass(item.status)}>{item.status}</span>
+                    </td>
+                    <td>{item.notes || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </main>
   );
@@ -193,12 +494,18 @@ const css = `
     margin-bottom: 18px;
   }
 
-  .back-link {
+  .back-link,
+  .cancel-link {
     display: inline-flex;
     margin-bottom: 16px;
     color: #ea580c;
     text-decoration: none;
     font-weight: 900;
+  }
+
+  .cancel-link {
+    margin-top: 10px;
+    margin-bottom: 0;
   }
 
   .eyebrow {
@@ -262,6 +569,12 @@ const css = `
     margin-bottom: 14px;
   }
 
+  .two-col {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 14px;
+  }
+
   .kpi-card,
   .panel {
     background: white;
@@ -290,6 +603,47 @@ const css = `
 
   .panel-head {
     margin-bottom: 14px;
+  }
+
+  label {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  input,
+  select,
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: #0f172a;
+    background: white;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  button {
+    border: none;
+    background: #ea580c;
+    color: white;
+    font-weight: 900;
+    border-radius: 12px;
+    padding: 11px 14px;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(234,88,12,.22);
+  }
+
+  button:hover {
+    background: #c2410c;
   }
 
   .table-wrap {
@@ -323,6 +677,38 @@ const css = `
     font-size: 12px;
   }
 
+  .actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .edit-link {
+    display: inline-flex;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .delete-button {
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    box-shadow: none;
+    font-size: 12px;
+  }
+
+  .delete-button:hover {
+    background: #fee2e2;
+  }
+
   .badge {
     display: inline-flex;
     padding: 4px 10px;
@@ -354,16 +740,34 @@ const css = `
     border-color: #fecaca;
   }
 
+  .badge.cancelled {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #cbd5e1;
+  }
+
+  .success-box {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 14px;
+    font-weight: 900;
+  }
+
   .error-box {
     background: white;
     border: 1px solid #fecaca;
     color: #b91c1c;
     border-radius: 18px;
     padding: 20px;
+    margin-bottom: 14px;
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1000px) {
     .hero,
+    .two-col,
     .kpi-grid {
       grid-template-columns: 1fr;
     }
