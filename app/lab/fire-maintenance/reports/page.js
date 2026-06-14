@@ -31,6 +31,13 @@ function currentMonthInput() {
   return `${now.getFullYear()}-${month}`;
 }
 
+function dateToMonthInput(value) {
+  if (!value) return currentMonthInput();
+  const text = String(value);
+  if (text.length < 7) return currentMonthInput();
+  return text.slice(0, 7);
+}
+
 function monthInputToDate(value) {
   if (!value) return `${currentMonthInput()}-01`;
   return `${value}-01`;
@@ -57,6 +64,7 @@ async function saveMonthlyReport(formData) {
     redirect("/lab/fire-maintenance/reports?error=env");
   }
 
+  const reportId = formData.get("report_id");
   const projectId = formData.get("project_id");
   const reportMonth = monthInputToDate(formData.get("report_month"));
 
@@ -66,30 +74,76 @@ async function saveMonthlyReport(formData) {
     .eq("project_id", projectId)
     .neq("status", "closed");
 
-  const { error } = await supabase.from("fire_monthly_reports").upsert(
-    {
-      project_id: projectId,
-      report_month: reportMonth,
-      visit_date: formData.get("visit_date") || todayIso(),
-      prepared_by: formData.get("prepared_by") || "Fire Kelas A Support",
-      summary: formData.get("summary") || null,
-      open_findings_count: openFindingsCount || 0,
-      status: formData.get("status") || "draft",
-      submitted_at:
-        formData.get("status") === "submitted" ? new Date().toISOString() : null,
-    },
-    {
-      onConflict: "project_id,report_month",
+  const payload = {
+    project_id: projectId,
+    report_month: reportMonth,
+    visit_date: formData.get("visit_date") || todayIso(),
+    prepared_by: formData.get("prepared_by") || "Fire Kelas A Support",
+    summary: formData.get("summary") || null,
+    open_findings_count: openFindingsCount || 0,
+    status: formData.get("status") || "draft",
+    submitted_at:
+      formData.get("status") === "submitted" ? new Date().toISOString() : null,
+  };
+
+  if (reportId) {
+    const { error } = await supabase
+      .from("fire_monthly_reports")
+      .update(payload)
+      .eq("id", reportId);
+
+    if (error) {
+      redirect("/lab/fire-maintenance/reports?error=update");
     }
-  );
+
+    revalidatePath("/lab/fire-maintenance/reports");
+    revalidatePath("/lab/fire-maintenance/reports/print");
+    revalidatePath("/lab/fire-maintenance");
+    redirect("/lab/fire-maintenance/reports?updated=1");
+  }
+
+  const { error } = await supabase.from("fire_monthly_reports").upsert(payload, {
+    onConflict: "project_id,report_month",
+  });
 
   if (error) {
     redirect("/lab/fire-maintenance/reports?error=save");
   }
 
   revalidatePath("/lab/fire-maintenance/reports");
+  revalidatePath("/lab/fire-maintenance/reports/print");
   revalidatePath("/lab/fire-maintenance");
   redirect("/lab/fire-maintenance/reports?saved=1");
+}
+
+async function deleteMonthlyReport(formData) {
+  "use server";
+
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    redirect("/lab/fire-maintenance/reports?error=env");
+  }
+
+  const reportId = formData.get("report_id");
+
+  if (!reportId) {
+    redirect("/lab/fire-maintenance/reports?error=delete");
+  }
+
+  const { error } = await supabase
+    .from("fire_monthly_reports")
+    .delete()
+    .eq("id", reportId);
+
+  if (error) {
+    redirect("/lab/fire-maintenance/reports?error=delete");
+  }
+
+  revalidatePath("/lab/fire-maintenance/reports");
+  revalidatePath("/lab/fire-maintenance/reports/print");
+  revalidatePath("/lab/fire-maintenance");
+  redirect("/lab/fire-maintenance/reports?deleted=1");
 }
 
 async function loadPageData() {
@@ -148,6 +202,7 @@ async function loadPageData() {
 }
 
 export default async function FireMonthlyReportPage({ searchParams }) {
+  const params = await searchParams;
   const data = await loadPageData();
 
   if (data.error) {
@@ -164,8 +219,12 @@ export default async function FireMonthlyReportPage({ searchParams }) {
 
   const { project, dashboard, reports, findings, schedules } = data;
 
-  const saved = searchParams?.saved;
-  const error = searchParams?.error;
+  const editingReport = reports.find((item) => item.id === params?.edit) || null;
+
+  const saved = params?.saved;
+  const updated = params?.updated;
+  const deleted = params?.deleted;
+  const error = params?.error;
 
   const openFindings = findings.filter((item) => item.status !== "closed");
   const highCriticalFindings = findings.filter(
@@ -174,6 +233,14 @@ export default async function FireMonthlyReportPage({ searchParams }) {
       ["high", "critical"].includes(String(item.severity).toLowerCase())
   );
   const completedSchedules = schedules.filter((item) => item.status === "done");
+
+  const generatedSummary = `Monthly fire protection maintenance report. Total assets: ${
+    dashboard.total_assets || 0
+  }. Schedule this month: ${
+    dashboard.schedules_this_month || 0
+  }. Open findings: ${openFindings.length}. High/critical findings: ${
+    highCriticalFindings.length
+  }.`;
 
   return (
     <main className="page">
@@ -268,7 +335,9 @@ export default async function FireMonthlyReportPage({ searchParams }) {
       </section>
 
       {saved && <div className="success-box">Monthly report berhasil disimpan.</div>}
-      {error && <div className="error-box">Ada error saat menyimpan monthly report.</div>}
+      {updated && <div className="success-box">Monthly report berhasil diupdate.</div>}
+      {deleted && <div className="success-box">Monthly report berhasil dihapus.</div>}
+      {error && <div className="error-box">Ada error saat memproses monthly report.</div>}
 
       <section className="kpi-grid">
         <div className="kpi-card">
@@ -299,20 +368,39 @@ export default async function FireMonthlyReportPage({ searchParams }) {
       <section className="two-col">
         <form action={saveMonthlyReport} className="panel">
           <div className="panel-head">
-            <h2>Create / Update Monthly Report</h2>
-            <p>Generate draft laporan bulanan berdasarkan kondisi terakhir.</p>
+            <h2>{editingReport ? "Edit Monthly Report" : "Create / Update Monthly Report"}</h2>
+            <p>
+              {editingReport
+                ? "Update draft laporan bulanan."
+                : "Generate draft laporan bulanan berdasarkan kondisi terakhir."}
+            </p>
+
+            {editingReport && (
+              <Link href="/lab/fire-maintenance/reports" className="cancel-link">
+                Cancel Edit
+              </Link>
+            )}
           </div>
 
           <input type="hidden" name="project_id" value={project?.id || ""} />
+          <input type="hidden" name="report_id" value={editingReport?.id || ""} />
 
           <label>
             Report Month
-            <input type="month" name="report_month" defaultValue={currentMonthInput()} />
+            <input
+              type="month"
+              name="report_month"
+              defaultValue={dateToMonthInput(editingReport?.report_month)}
+            />
           </label>
 
           <label>
             Visit Date
-            <input type="date" name="visit_date" defaultValue={todayIso()} />
+            <input
+              type="date"
+              name="visit_date"
+              defaultValue={editingReport?.visit_date || todayIso()}
+            />
           </label>
 
           <label>
@@ -320,13 +408,13 @@ export default async function FireMonthlyReportPage({ searchParams }) {
             <input
               type="text"
               name="prepared_by"
-              defaultValue="Fire Kelas A Support"
+              defaultValue={editingReport?.prepared_by || "Fire Kelas A Support"}
             />
           </label>
 
           <label>
             Report Status
-            <select name="status" defaultValue="draft">
+            <select name="status" defaultValue={editingReport?.status || "draft"}>
               <option value="draft">Draft</option>
               <option value="submitted">Submitted</option>
             </select>
@@ -337,17 +425,14 @@ export default async function FireMonthlyReportPage({ searchParams }) {
             <textarea
               name="summary"
               rows="6"
-              defaultValue={`Monthly fire protection maintenance report. Total assets: ${
-                dashboard.total_assets || 0
-              }. Schedule this month: ${
-                dashboard.schedules_this_month || 0
-              }. Open findings: ${openFindings.length}. High/critical findings: ${
-                highCriticalFindings.length
-              }.`}
+              defaultValue={editingReport?.summary || ""}
+
             />
           </label>
 
-          <button type="submit">Save Monthly Report</button>
+          <button type="submit">
+            {editingReport ? "Update Monthly Report" : "Save Monthly Report"}
+          </button>
         </form>
 
         <section className="panel">
@@ -373,6 +458,22 @@ export default async function FireMonthlyReportPage({ searchParams }) {
 
                 <div className="report-meta">
                   Open findings at report time: {report.open_findings_count || 0}
+                </div>
+
+                <div className="actions">
+                  <Link
+                    href={`/lab/fire-maintenance/reports?edit=${report.id}`}
+                    className="edit-link"
+                  >
+                    Edit
+                  </Link>
+
+                  <form action={deleteMonthlyReport}>
+                    <input type="hidden" name="report_id" value={report.id} />
+                    <button type="submit" className="delete-button">
+                      Delete
+                    </button>
+                  </form>
                 </div>
               </div>
             ))}
@@ -403,12 +504,18 @@ const css = `
     margin-bottom: 18px;
   }
 
-  .back-link {
+  .back-link,
+  .cancel-link {
     display: inline-flex;
     margin-bottom: 16px;
     color: #ea580c;
     text-decoration: none;
     font-weight: 900;
+  }
+
+  .cancel-link {
+    margin-top: 10px;
+    margin-bottom: 0;
   }
 
   .eyebrow {
@@ -576,6 +683,39 @@ const css = `
     margin-bottom: 6px;
   }
 
+  .actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+  }
+
+  .edit-link {
+    display: inline-flex;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .delete-button {
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    box-shadow: none;
+    font-size: 12px;
+  }
+
+  .delete-button:hover {
+    background: #fee2e2;
+  }
+
   .badge {
     display: inline-flex;
     padding: 4px 10px;
@@ -636,4 +776,5 @@ const css = `
     }
   }
 `;
+
 
