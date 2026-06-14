@@ -191,6 +191,71 @@ export default async function FireMonthlyReportPage({ searchParams }) {
             Draft laporan bulanan untuk visit, inspection summary, schedule status,
             open findings, dan training record.
           </p>
+
+          <p style={{ marginTop: 18 }}>
+            <a
+              href="/lab/fire-maintenance/reports/print?type=monthly"
+              style={{
+                display: "inline-flex",
+                background: "#ea580c",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginRight: 10,
+              }}
+            >
+              Print Monthly →
+            </a>
+
+            <a
+              href="/lab/fire-maintenance/reports/print?type=quarterly"
+              style={{
+                display: "inline-flex",
+                background: "#0f172a",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginRight: 10,
+              }}
+            >
+              Print 3 Month →
+            </a>
+
+            <a
+              href="/lab/fire-maintenance/reports/print?type=semester"
+              style={{
+                display: "inline-flex",
+                background: "#047857",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginRight: 10,
+              }}
+            >
+              Print 6 Month →
+            </a>
+
+            <a
+              href="/lab/fire-maintenance/reports/print?type=annual"
+              style={{
+                display: "inline-flex",
+                background: "#7c2d12",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+              }}
+            >
+              Print Annual →
+            </a>
+          </p>
         </div>
 
         <div className="project-box">
@@ -571,3 +636,4 @@ const css = `
     }
   }
 `;
+
