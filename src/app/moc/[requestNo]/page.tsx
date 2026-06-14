@@ -1,4 +1,23 @@
-"use client";
+﻿"use client";
+
+type ApprovalStep = {
+  id?: string;
+  request_id?: string;
+  step_name?: string;
+  approval_type?: string;
+  approval_role?: string;
+  approval_name?: string;
+  approver_role?: string;
+  approver_name?: string;
+  status?: string;
+  comment?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any;
+};
+
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -251,7 +270,7 @@ setCurrentProfile(profile);
   .maybeSingle();
 
 if (summaryError) {
-  setMessage(`MOC detail error: ${summaryError.message}`);
+  setMessage(`MOC detail error: ${(summaryError as any)?.message || "Unknown error"}`);
   setLoading(false);
   return;
 }
@@ -265,7 +284,7 @@ if (!summaryData) {
 }
 
     if (summaryError) {
-      setMessage(`MOC detail error: ${summaryError.message}`);
+      setMessage(`MOC detail error: ${(summaryError as any)?.message || "Unknown error"}`);
       setLoading(false);
       return;
     }
@@ -277,7 +296,7 @@ if (!summaryData) {
   .maybeSingle();
 
 if (reqError) {
-  setMessage(`Request lookup error: ${reqError.message}`);
+  setMessage(`Request lookup error: ${(reqError as any)?.message || "Unknown error"}`);
   setLoading(false);
   return;
 }
@@ -291,12 +310,12 @@ if (!reqData) {
 }
 
     if (reqError) {
-      setMessage(`Request lookup error: ${reqError.message}`);
+      setMessage(`Request lookup error: ${(reqError as any)?.message || "Unknown error"}`);
       setLoading(false);
       return;
     }
 if (reqError) {
-  setMessage(`Request lookup error: ${reqError.message}`);
+  setMessage(`Request lookup error: ${(reqError as any)?.message || "Unknown error"}`);
   setLoading(false);
   return;
 }
@@ -376,8 +395,8 @@ const { data: attachmentsData } = await supabase
 
     setSummary({
   ...summaryData,
-  screening_decision: reqData?.screening_decision ?? null,
-  screening_comment: reqData?.screening_comment ?? null,
+  screening_decision: (reqData as any)?.screening_decision ?? null,
+  screening_comment: (reqData as any)?.screening_comment ?? null,
 });
     setTimeline((timelineData || []) as TimelineEvent[]);
     setAuditEvents((auditData || []) as AuditEvent[]);
@@ -1667,7 +1686,7 @@ function canAdvanceStatus(status?: string | null) {
             href="/"
             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
           >
-            ← Back to Dashboard
+            â† Back to Dashboard
           </Link>
 
           <div className="flex flex-wrap gap-3">
@@ -2863,7 +2882,7 @@ const { error: auditError } = await supabase.from("moc_audit_events").insert({
 
 if (auditError) {
   setUploadMessage(
-    `Attachment uploaded successfully, but audit log failed: ${auditError.message}`
+    `Attachment uploaded successfully, but audit log failed: ${(auditError as any)?.message || "Unknown error"}`
   );
 } else {
   setUploadMessage("Attachment uploaded successfully.");
@@ -2999,7 +3018,7 @@ actor_role: profileData?.app_role || "authenticated_user",
   source_table: "moc_action_attachments",
 });
 
-if (auditError) throw new Error(`Audit insert failed: ${auditError.message}`);
+if (auditError) throw new Error(`Audit insert failed: ${(auditError as any)?.message || "Unknown error"}`);
 setUploadMessage(
   decision === "accepted"
     ? "Evidence accepted successfully."
@@ -3197,7 +3216,7 @@ await onRefresh();
     {attachment.file_name}
   </p>
   <p className="text-xs text-slate-500">
-    {formatFileSize(attachment.file_size)} ·{" "}
+    {formatFileSize(attachment.file_size)} Â·{" "}
     {formatStatus(attachment.verification_status)}
   </p>
 {attachment.verifier_comment && (
@@ -3601,3 +3620,7 @@ function formatDate(value: string | null) {
     timeStyle: "short",
   });
 }
+
+
+
+
