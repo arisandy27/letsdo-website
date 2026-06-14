@@ -221,6 +221,22 @@ export default async function FireMaintenancePage() {
             >
               Open Training Record →
             </a>
+
+            <a
+              href="/lab/fire-maintenance/scope"
+              style={{
+                display: "inline-flex",
+                background: "#4c1d95",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginLeft: 10,
+              }}
+            >
+              Open Scope Matrix →
+            </a>
           </p>
         </div>
 
@@ -694,6 +710,7 @@ const css = `
     }
   }
 `;
+
 
 
 
