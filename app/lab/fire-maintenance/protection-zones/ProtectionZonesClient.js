@@ -96,16 +96,18 @@ export default function ProtectionZonesClient({ zones = [] }) {
       zone.source_page,
     ]);
 
-    const csv = [headers, ...rows]
+    const csvBody = [headers, ...rows]
       .map((row) => row.map(csvEscape).join(","))
-      .join("\n");
+      .join("\r\n");
+
+    const csv = "\uFEFFsep=,\r\n" + csvBody;
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
     link.href = url;
-    link.download = "fire-protection-zones.csv";
+    link.download = "fire-protection-zones-excel-ready.csv";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -241,14 +243,15 @@ const sectionHeaderStyle = {
 
 const actionGroupStyle = {
   display: "flex",
-  gap: 8,
+  gap: 10,
   flexWrap: "wrap",
   justifyContent: "flex-end",
+  alignItems: "center",
 };
 
 const toolbarStyle = {
   display: "grid",
-  gridTemplateColumns: "minmax(260px, 1fr) 180px 260px 90px",
+  gridTemplateColumns: "minmax(260px, 1fr) 180px 260px 100px",
   gap: 10,
   marginBottom: 16,
   alignItems: "center",
@@ -256,54 +259,76 @@ const toolbarStyle = {
 
 const inputStyle = {
   width: "100%",
-  padding: "11px 12px",
+  height: 44,
+  padding: "0 14px",
   border: "1px solid #cbd5e1",
-  borderRadius: 12,
+  borderRadius: 8,
   fontSize: 14,
   outline: "none",
+  boxSizing: "border-box",
 };
 
 const selectStyle = {
   width: "100%",
-  padding: "11px 12px",
+  height: 44,
+  padding: "0 14px",
   border: "1px solid #cbd5e1",
-  borderRadius: 12,
+  borderRadius: 8,
   background: "white",
   fontSize: 14,
+  boxSizing: "border-box",
 };
 
 const primaryButtonStyle = {
+  height: 44,
   border: "1px solid #ea580c",
   background: "#ea580c",
   color: "white",
-  padding: "10px 12px",
-  borderRadius: 12,
-  fontWeight: 900,
+  padding: "0 16px",
+  borderRadius: 8,
+  fontWeight: 800,
   cursor: "pointer",
   textDecoration: "none",
   fontSize: 14,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxSizing: "border-box",
+  whiteSpace: "nowrap",
 };
 
 const secondaryButtonStyle = {
+  height: 44,
   border: "1px solid #cbd5e1",
   background: "white",
   color: "#334155",
-  padding: "10px 12px",
-  borderRadius: 12,
-  fontWeight: 900,
+  padding: "0 16px",
+  borderRadius: 8,
+  fontWeight: 800,
   cursor: "pointer",
   fontSize: 14,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxSizing: "border-box",
+  whiteSpace: "nowrap",
 };
 
 const linkButtonStyle = {
+  height: 44,
   border: "1px solid #cbd5e1",
   background: "white",
   color: "#0369a1",
-  padding: "10px 12px",
-  borderRadius: 12,
-  fontWeight: 900,
+  padding: "0 16px",
+  borderRadius: 8,
+  fontWeight: 800,
   textDecoration: "none",
   fontSize: 14,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxSizing: "border-box",
+  whiteSpace: "nowrap",
 };
 
 const tableStyle = {
