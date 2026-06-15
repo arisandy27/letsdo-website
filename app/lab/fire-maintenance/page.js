@@ -128,7 +128,7 @@ export default async function FireMaintenancePage() {
 
           <p style={{ marginTop: 18 }}>
             <a
-              href="/lab/fire-maintenance/assets"
+              href="/lab/fire-maintenance/asset-register"
               style={{
                 display: "inline-flex",
                 background: "#ea580c",
@@ -806,6 +806,7 @@ const css = `
     }
   }
 `;
+
 
 
 
