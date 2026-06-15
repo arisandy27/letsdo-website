@@ -349,6 +349,22 @@ export default async function FireMaintenancePage() {
             >
               Open Asset Verification →
             </a>
+
+            <a
+              href="/lab/fire-maintenance/data-readiness"
+              style={{
+                display: "inline-flex",
+                background: "#a16207",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginLeft: 10,
+              }}
+            >
+              Open Data Readiness →
+            </a>
           </p>
         </div>
 
@@ -822,6 +838,7 @@ const css = `
     }
   }
 `;
+
 
 
 
