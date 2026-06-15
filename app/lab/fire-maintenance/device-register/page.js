@@ -31,7 +31,24 @@ function countBy(items, predicate) {
   return items.filter(predicate).length;
 }
 
-export default async function DeviceRegisterPage() {
+function uniqueOptions(items, key) {
+  return Array.from(
+    new Set(items.map((item) => item[key]).filter(Boolean))
+  ).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+function includesText(value, query) {
+  return String(value || "").toLowerCase().includes(query);
+}
+
+export default async function DeviceRegisterPage({ searchParams }) {
+  const params = await searchParams;
+
+  const q = String(params?.q || "").trim().toLowerCase();
+  const parentPanelFilter = String(params?.parent_panel || "");
+  const assetTypeFilter = String(params?.asset_type || "");
+  const areaFilter = String(params?.area || "");
+
   const supabase = getSupabaseAdmin();
 
   const { data: project } = await supabase
@@ -51,7 +68,34 @@ export default async function DeviceRegisterPage() {
 
   const devices = devicesRaw || [];
 
+  const filteredDevices = devices.filter((device) => {
+    const matchSearch =
+      !q ||
+      includesText(device.tag_no, q) ||
+      includesText(device.asset_code, q) ||
+      includesText(device.asset_name, q) ||
+      includesText(device.asset_type, q) ||
+      includesText(device.device_type_code, q) ||
+      includesText(device.device_signal_type, q) ||
+      includesText(device.area, q) ||
+      includesText(device.location, q) ||
+      includesText(device.parent_panel, q);
+
+    const matchParentPanel =
+      !parentPanelFilter || device.parent_panel === parentPanelFilter;
+
+    const matchAssetType =
+      !assetTypeFilter || device.asset_type === assetTypeFilter;
+
+    const matchArea =
+      !areaFilter || device.area === areaFilter;
+
+    return matchSearch && matchParentPanel && matchAssetType && matchArea;
+  });
+
   const totalDevices = devices.length;
+  const filteredCount = filteredDevices.length;
+
   const panelCount = new Set(devices.map((item) => item.parent_panel).filter(Boolean)).size;
   const detectorCount = countBy(devices, (item) =>
     `${item.asset_type} ${item.device_signal_type}`.toLowerCase().includes("detector")
@@ -63,6 +107,10 @@ export default async function DeviceRegisterPage() {
     const value = `${item.asset_type} ${item.device_signal_type}`.toLowerCase();
     return value.includes("bell") || value.includes("strobe") || value.includes("alarm");
   });
+
+  const parentPanelOptions = uniqueOptions(devices, "parent_panel");
+  const assetTypeOptions = uniqueOptions(devices, "asset_type");
+  const areaOptions = uniqueOptions(devices, "area");
 
   if (error) {
     return (
@@ -90,8 +138,7 @@ export default async function DeviceRegisterPage() {
           <h1 style={heroTitleStyle}>Device / Tag Register</h1>
           <p style={heroTextStyle}>
             Actual device/tag register imported from the Equipment Tag Numbering Table.
-            This register is used for device-level inspection, fault tracking, and
-            maintenance traceability.
+            Search and filter by tag number, parent panel, device type, and area.
           </p>
         </div>
 
@@ -111,16 +158,78 @@ export default async function DeviceRegisterPage() {
 
       <section style={kpiGridStyle}>
         <KpiCard title="Device Tags" value={totalDevices} caption="Imported tag records" />
+        <KpiCard title="Filtered" value={filteredCount} caption="Current view" />
         <KpiCard title="Parent Panels" value={panelCount} caption="MFACP/LFACP groups" />
         <KpiCard title="Detectors" value={detectorCount} caption="Smoke/heat/flame devices" />
-        <KpiCard title="MCP" value={mcpCount} caption="Manual call points" />
-        <KpiCard title="Alarm Devices" value={alarmDeviceCount} caption="Bell/strobe/alarm" />
+        <KpiCard title="MCP / Alarm" value={`${mcpCount}/${alarmDeviceCount}`} caption="MCP / bell-strobe" />
+      </section>
+
+      <section style={panelStyle}>
+        <h2 style={sectionTitleStyle}>Search & Filter</h2>
+
+        <form method="GET" style={filterGridStyle}>
+          <label style={labelStyle}>
+            Search
+            <input
+              name="q"
+              defaultValue={params?.q || ""}
+              placeholder="Search tag, area, panel, device type..."
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={labelStyle}>
+            Parent Panel
+            <select name="parent_panel" defaultValue={parentPanelFilter} style={inputStyle}>
+              <option value="">All panels</option>
+              {parentPanelOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={labelStyle}>
+            Device Type
+            <select name="asset_type" defaultValue={assetTypeFilter} style={inputStyle}>
+              <option value="">All device types</option>
+              {assetTypeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={labelStyle}>
+            Area
+            <select name="area" defaultValue={areaFilter} style={inputStyle}>
+              <option value="">All areas</option>
+              {areaOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "end" }}>
+            <button type="submit" style={primaryButtonStyle}>
+              Apply Filter
+            </button>
+
+            <a href="/lab/fire-maintenance/device-register" style={secondaryLinkStyle}>
+              Reset
+            </a>
+          </div>
+        </form>
       </section>
 
       <section style={panelStyle}>
         <h2 style={sectionTitleStyle}>Device / Tag List</h2>
         <p style={{ color: "#64748b", marginTop: 0 }}>
-          Source: Equipment Tag Numbering Table from O&amp;M Manual.
+          Showing {filteredCount} of {totalDevices} device/tag records.
         </p>
 
         <div style={{ overflowX: "auto" }}>
@@ -134,12 +243,12 @@ export default async function DeviceRegisterPage() {
                 <th style={thStyle}>Location</th>
                 <th style={thStyle}>Device Type Code</th>
                 <th style={thStyle}>Device / Signal Type</th>
-                <th style={thStyle}>Status</th>
+                <th style={thStyle}>Verification</th>
                 <th style={thStyle}>Source</th>
               </tr>
             </thead>
             <tbody>
-              {devices.map((device) => (
+              {filteredDevices.map((device) => (
                 <tr key={device.id}>
                   <td style={tdStyle}>
                     <strong>{formatText(device.tag_no)}</strong>
@@ -158,7 +267,25 @@ export default async function DeviceRegisterPage() {
                     <div style={{ color: "#64748b" }}>{formatText(device.asset_type)}</div>
                   </td>
                   <td style={tdStyle}>
-                    <span style={badgeStyle}>{formatText(device.status)}</span>
+                    <span
+                      style={{
+                        ...badgeStyle,
+                        background:
+                          device.verification_status === "site_verified"
+                            ? "#dcfce7"
+                            : device.verification_status === "documented"
+                              ? "#e0f2fe"
+                              : "#f1f5f9",
+                        color:
+                          device.verification_status === "site_verified"
+                            ? "#166534"
+                            : device.verification_status === "documented"
+                              ? "#075985"
+                              : "#475569",
+                      }}
+                    >
+                      {formatText(device.verification_status || "draft")}
+                    </span>
                   </td>
                   <td style={tdStyle}>
                     <div>{formatText(device.source_page)}</div>
@@ -169,10 +296,10 @@ export default async function DeviceRegisterPage() {
                 </tr>
               ))}
 
-              {devices.length === 0 && (
+              {filteredDevices.length === 0 && (
                 <tr>
                   <td colSpan="9" style={{ ...tdStyle, color: "#64748b" }}>
-                    No device/tag data found.
+                    No device/tag data matches the current filter.
                   </td>
                 </tr>
               )}
@@ -281,6 +408,62 @@ const sectionTitleStyle = {
   color: "#0f172a",
 };
 
+const filterGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "1.4fr 1fr 1fr 1fr auto",
+  gap: 12,
+  alignItems: "end",
+};
+
+const labelStyle = {
+  display: "grid",
+  gap: 6,
+  color: "#334155",
+  fontWeight: 800,
+};
+
+const inputStyle = {
+  width: "100%",
+  height: 42,
+  padding: "0 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 12,
+  background: "white",
+  color: "#0f172a",
+  boxSizing: "border-box",
+  outline: "none",
+};
+
+const primaryButtonStyle = {
+  height: 42,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#0369a1",
+  color: "white",
+  border: 0,
+  borderRadius: 12,
+  padding: "0 16px",
+  fontWeight: 900,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const secondaryLinkStyle = {
+  height: 42,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#475569",
+  color: "white",
+  textDecoration: "none",
+  borderRadius: 12,
+  padding: "0 16px",
+  fontWeight: 900,
+  whiteSpace: "nowrap",
+  boxSizing: "border-box",
+};
+
 const tableStyle = {
   width: "100%",
   borderCollapse: "collapse",
@@ -308,6 +491,5 @@ const badgeStyle = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 900,
-  background: "#dcfce7",
-  color: "#166534",
 };
+
