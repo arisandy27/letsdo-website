@@ -55,6 +55,7 @@ async function createInspection(formData) {
   const projectId = formData.get("project_id");
   const assetId = formData.get("asset_id");
   const scheduleId = formData.get("schedule_id");
+  const inspectionDate = formData.get("inspection_date") || todayIso();
 
   const checklist = {
     visual_condition: formData.get("visual_condition") === "on",
@@ -69,7 +70,7 @@ async function createInspection(formData) {
     project_id: projectId,
     asset_id: assetId || null,
     schedule_id: scheduleId || null,
-    inspection_date: formData.get("inspection_date") || todayIso(),
+    inspection_date: inspectionDate,
     inspector_name: formData.get("inspector_name") || "Fire Kelas A Support",
     overall_condition: formData.get("overall_condition") || "good",
     checklist,
@@ -82,7 +83,42 @@ async function createInspection(formData) {
     redirect("/lab/fire-maintenance/inspections?error=insert");
   }
 
+  if (scheduleId) {
+    await supabase
+      .from("fire_maintenance_schedules")
+      .update({
+        status: "done",
+        actual_date: inspectionDate,
+      })
+      .eq("id", scheduleId);
+  }
+
+  if (assetId) {
+    const { data: nextSchedule } = await supabase
+      .from("fire_maintenance_schedules")
+      .select("planned_date")
+      .eq("asset_id", assetId)
+      .gt("planned_date", inspectionDate)
+      .neq("status", "done")
+      .neq("status", "cancelled")
+      .order("planned_date", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    await supabase
+      .from("fire_assets")
+      .update({
+        last_inspection_date: inspectionDate,
+        next_inspection_date: nextSchedule?.planned_date || null,
+      })
+      .eq("id", assetId);
+  }
+
   revalidatePath("/lab/fire-maintenance/inspections");
+  revalidatePath("/lab/fire-maintenance/schedules");
+  revalidatePath("/lab/fire-maintenance/assets");
+  revalidatePath("/lab/fire-maintenance/timeline");
+  revalidatePath("/lab/fire-maintenance/reports");
   revalidatePath("/lab/fire-maintenance");
   redirect("/lab/fire-maintenance/inspections?created=1");
 }
@@ -224,11 +260,28 @@ export default async function FireInspectionPage({ searchParams }) {
             Related Schedule
             <select name="schedule_id">
               <option value="">No related schedule</option>
-              {schedules.map((schedule) => (
-                <option key={schedule.id} value={schedule.id}>
-                  {schedule.schedule_code} - {formatDate(schedule.planned_date)}
-                </option>
-              ))}
+              {schedules.map((schedule) => {
+                const scopeTitle =
+                  schedule.fire_scope_templates?.scope_title ||
+                  schedule.activity_type ||
+                  "Schedule";
+
+                const systemGroup =
+                  schedule.fire_scope_templates?.system_group ||
+                  schedule.fire_assets?.asset_code ||
+                  "General";
+
+                const frequency =
+                  schedule.fire_scope_templates?.frequency ||
+                  schedule.frequency ||
+                  "-";
+
+                return (
+                  <option key={schedule.id} value={schedule.id}>
+                    {formatDate(schedule.planned_date)} | {frequency} | {systemGroup} | {scopeTitle} ({schedule.schedule_code})
+                  </option>
+                );
+              })}
             </select>
           </label>
 
@@ -591,3 +644,5 @@ const css = `
     }
   }
 `;
+
+
