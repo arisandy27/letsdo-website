@@ -301,6 +301,38 @@ export default async function FireMaintenancePage() {
             >
               Open Report Analysis →
             </a>
+
+            <a
+              href="/lab/fire-maintenance/protection-zones"
+              style={{
+                display: "inline-flex",
+                background: "#334155",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginLeft: 10,
+              }}
+            >
+              Open Protection Zones →
+            </a>
+
+            <a
+              href="/lab/fire-maintenance/device-register"
+              style={{
+                display: "inline-flex",
+                background: "#4338ca",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginLeft: 10,
+              }}
+            >
+              Open Device Register →
+            </a>
           </p>
         </div>
 
@@ -774,6 +806,7 @@ const css = `
     }
   }
 `;
+
 
 
 
