@@ -269,6 +269,22 @@ export default async function FireMaintenancePage() {
             >
               Open Timeline →
             </a>
+
+            <a
+              href="/lab/fire-maintenance/scope-mapping"
+              style={{
+                display: "inline-flex",
+                background: "#7c3aed",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginLeft: 10,
+              }}
+            >
+              Open Scope Mapping →
+            </a>
           </p>
         </div>
 
@@ -742,6 +758,7 @@ const css = `
     }
   }
 `;
+
 
 
 
