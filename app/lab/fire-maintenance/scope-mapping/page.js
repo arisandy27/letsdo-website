@@ -153,7 +153,7 @@ async function regenerateSchedules() {
 
   const supabase = getSupabaseAdmin();
 
-  const { error } = await supabase.rpc("generate_fire_verified_contract_schedule", {
+  const { error } = await supabase.rpc("generate_fire_contract_schedule_by_asset", {
     p_project_code: PROJECT_CODE,
   });
 
@@ -343,7 +343,7 @@ export default async function FireScopeMappingPage({ searchParams }) {
 
           <form action={regenerateSchedules}>
             <button type="submit" style={warningButtonStyle}>
-              Regenerate Schedule from Verified Mapping
+              Regenerate Working Schedule
             </button>
           </form>
         </div>
@@ -631,6 +631,8 @@ const badgeStyle = {
   fontSize: 12,
   fontWeight: 900,
 };
+
+
 
 
 
