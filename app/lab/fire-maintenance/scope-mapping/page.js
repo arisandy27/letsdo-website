@@ -93,12 +93,67 @@ async function deleteMapping(formData) {
   redirect("/lab/fire-maintenance/scope-mapping?deleted=1");
 }
 
+async function verifyMapping(formData) {
+  "use server";
+
+  const supabase = getSupabaseAdmin();
+
+  const mappingId = formData.get("mapping_id");
+
+  if (!mappingId) {
+    redirect("/lab/fire-maintenance/scope-mapping?error=missing_mapping");
+  }
+
+  const { error } = await supabase
+    .from("fire_scope_asset_mappings")
+    .update({
+      validation_status: "verified",
+      validated_by: "Bobby Rachmat Arisandy",
+      validated_at: new Date().toISOString(),
+    })
+    .eq("id", mappingId);
+
+  if (error) {
+    redirect("/lab/fire-maintenance/scope-mapping?error=verify");
+  }
+
+  revalidatePath("/lab/fire-maintenance/scope-mapping");
+  redirect("/lab/fire-maintenance/scope-mapping?verified=1");
+}
+
+async function unverifyMapping(formData) {
+  "use server";
+
+  const supabase = getSupabaseAdmin();
+
+  const mappingId = formData.get("mapping_id");
+
+  if (!mappingId) {
+    redirect("/lab/fire-maintenance/scope-mapping?error=missing_mapping");
+  }
+
+  const { error } = await supabase
+    .from("fire_scope_asset_mappings")
+    .update({
+      validation_status: "draft",
+      validated_by: null,
+      validated_at: null,
+    })
+    .eq("id", mappingId);
+
+  if (error) {
+    redirect("/lab/fire-maintenance/scope-mapping?error=unverify");
+  }
+
+  revalidatePath("/lab/fire-maintenance/scope-mapping");
+  redirect("/lab/fire-maintenance/scope-mapping?draft=1");
+}
 async function regenerateSchedules() {
   "use server";
 
   const supabase = getSupabaseAdmin();
 
-  const { error } = await supabase.rpc("generate_fire_contract_schedule_by_asset", {
+  const { error } = await supabase.rpc("generate_fire_verified_contract_schedule", {
     p_project_code: PROJECT_CODE,
   });
 
@@ -153,7 +208,7 @@ export default async function FireScopeMappingPage({ searchParams }) {
     project?.id
       ? supabase
           .from("fire_assets")
-          .select("id, asset_code, asset_name, asset_type, area, status")
+          .select("id, asset_code, asset_name, asset_type, asset_level, zone_no, tag_no, area, status")
           .eq("project_id", project.id)
           .eq("status", "active")
           .order("asset_code", { ascending: true })
@@ -163,7 +218,22 @@ export default async function FireScopeMappingPage({ searchParams }) {
   const summary = summaryResult.data || [];
   const details = detailResult.data || [];
   const scopes = scopeResult.data || [];
-  const assets = assetResult.data || [];
+  const assetLevelOrder = {
+    equipment: 1,
+    protection_zone: 2,
+    device: 3,
+  };
+
+  const assets = (assetResult.data || []).sort((a, b) => {
+    const levelA = a.asset_level || "equipment";
+    const levelB = b.asset_level || "equipment";
+
+    return (
+      (assetLevelOrder[levelA] || 99) -
+        (assetLevelOrder[levelB] || 99) ||
+      String(a.asset_code || "").localeCompare(String(b.asset_code || ""))
+    );
+  });
 
   const mappedCount = summary.filter((item) => item.mapping_status === "mapped").length;
   const notMappedCount = summary.filter((item) => item.mapping_status === "not_mapped").length;
@@ -214,6 +284,8 @@ export default async function FireScopeMappingPage({ searchParams }) {
 
       {params?.added && <Alert text="Mapping added successfully." />}
       {params?.deleted && <Alert text="Mapping deleted successfully." />}
+      {params?.verified && <Alert text="Mapping verified successfully." />}
+      {params?.draft && <Alert text="Mapping returned to draft." />}
       {params?.regenerated && <Alert text="Schedule regenerated successfully." />}
       {params?.error && <ErrorAlert text={`Action failed: ${params.error}`} />}
 
@@ -239,7 +311,7 @@ export default async function FireScopeMappingPage({ searchParams }) {
               <option value="">Select asset</option>
               {assets.map((asset) => (
                 <option key={asset.id} value={asset.id}>
-                  {asset.asset_code} | {asset.asset_name} | {asset.asset_type}
+                  {asset.asset_level || "equipment"} | {asset.asset_code} | {asset.asset_name} | {asset.asset_type}
                 </option>
               ))}
             </select>
@@ -271,7 +343,7 @@ export default async function FireScopeMappingPage({ searchParams }) {
 
           <form action={regenerateSchedules}>
             <button type="submit" style={warningButtonStyle}>
-              Regenerate Schedule from Mapping
+              Regenerate Schedule from Verified Mapping
             </button>
           </form>
         </div>
@@ -344,17 +416,41 @@ export default async function FireScopeMappingPage({ searchParams }) {
                   <td style={tdStyle}>
                     <strong>{item.asset_code}</strong>
                     <div>{item.asset_name}</div>
-                    <div style={{ color: "#64748b" }}>{item.asset_type}</div>
+                    <div style={{ color: "#64748b" }}>{item.asset_level || "equipment"} | {item.asset_type}</div>
                   </td>
                   <td style={tdStyle}>{formatText(item.area)}</td>
-                  <td style={tdStyle}>{formatText(item.notes)}</td>
                   <td style={tdStyle}>
-                    <form action={deleteMapping}>
-                      <input type="hidden" name="mapping_id" value={item.mapping_id} />
-                      <button type="submit" style={dangerButtonStyle}>
-                        Delete
-                      </button>
-                    </form>
+                    <div>{formatText(item.notes)}</div>
+                    <div style={{ color: "#64748b", marginTop: 4 }}>
+                      Mapping: {item.mapping_source || "auto"} | Status: {item.validation_status || "draft"}
+                    </div>
+                    <div style={{ color: "#64748b", marginTop: 4 }}>
+                      Asset data: {item.verification_status || "draft"} | Source: {item.data_source || "-"}
+                    </div>
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <form action={verifyMapping}>
+                        <input type="hidden" name="mapping_id" value={item.mapping_id} />
+                        <button type="submit" style={successButtonStyle}>
+                          Verify
+                        </button>
+                      </form>
+
+                      <form action={unverifyMapping}>
+                        <input type="hidden" name="mapping_id" value={item.mapping_id} />
+                        <button type="submit" style={secondaryButtonStyle}>
+                          Draft
+                        </button>
+                      </form>
+
+                      <form action={deleteMapping}>
+                        <input type="hidden" name="mapping_id" value={item.mapping_id} />
+                        <button type="submit" style={dangerButtonStyle}>
+                          Delete
+                        </button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -478,6 +574,26 @@ const warningButtonStyle = {
   cursor: "pointer",
 };
 
+const successButtonStyle = {
+  background: "#16a34a",
+  color: "white",
+  border: 0,
+  borderRadius: 10,
+  padding: "8px 10px",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const secondaryButtonStyle = {
+  background: "#475569",
+  color: "white",
+  border: 0,
+  borderRadius: 10,
+  padding: "8px 10px",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
 const dangerButtonStyle = {
   background: "#dc2626",
   color: "white",
@@ -515,4 +631,14 @@ const badgeStyle = {
   fontSize: 12,
   fontWeight: 900,
 };
+
+
+
+
+
+
+
+
+
+
 

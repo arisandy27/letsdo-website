@@ -333,6 +333,22 @@ export default async function FireMaintenancePage() {
             >
               Open Device Register →
             </a>
+
+            <a
+              href="/lab/fire-maintenance/asset-verification"
+              style={{
+                display: "inline-flex",
+                background: "#15803d",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginLeft: 10,
+              }}
+            >
+              Open Asset Verification →
+            </a>
           </p>
         </div>
 
@@ -806,6 +822,7 @@ const css = `
     }
   }
 `;
+
 
 
 
