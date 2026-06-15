@@ -1,4 +1,5 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+import ProtectionZonesClient from "./ProtectionZonesClient";
 
 export const dynamic = "force-dynamic";
 
@@ -23,30 +24,56 @@ function getSupabaseAdmin() {
   });
 }
 
-function formatText(value) {
-  return value || "-";
-}
-
 export default async function ProtectionZonesPage() {
   const supabase = getSupabaseAdmin();
 
-  const { data: project } = await supabase
+  const { data: project, error: projectError } = await supabase
     .from("fire_projects")
-    .select("*")
+    .select("id, project_code, project_name")
     .eq("project_code", PROJECT_CODE)
     .maybeSingle();
 
+  if (projectError) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Protection Zone Register</h1>
+        <p style={{ color: "#dc2626", fontWeight: 800 }}>
+          Failed to load fire project.
+        </p>
+        <pre>{projectError.message}</pre>
+      </main>
+    );
+  }
+
+  if (!project) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Protection Zone Register</h1>
+        <p style={{ color: "#dc2626", fontWeight: 800 }}>
+          Fire project not found: {PROJECT_CODE}
+        </p>
+      </main>
+    );
+  }
+
   const { data: zonesRaw, error } = await supabase
     .from("fire_assets")
-    .select("*")
-    .eq("project_id", project?.id || "00000000-0000-0000-0000-000000000000")
+    .select(
+      "id, asset_code, asset_name, asset_type, area, location, criticality, zone_no, fire_protection_type, fire_detection_type, actuation_type, source_page"
+    )
+    .eq("project_id", project.id)
     .eq("asset_level", "protection_zone")
     .order("asset_code", { ascending: true });
 
   const zones = zonesRaw || [];
 
-  const highCritical = zones.filter((item) => item.criticality === "high").length;
-  const officialZoneCount = new Set(zones.map((item) => item.zone_no).filter(Boolean)).size;
+  const highCritical = zones.filter(
+    (item) => String(item.criticality || "").toLowerCase() === "high"
+  ).length;
+
+  const officialZoneCount = new Set(
+    zones.map((item) => item.zone_no).filter(Boolean)
+  ).size;
 
   if (error) {
     return (
@@ -64,7 +91,7 @@ export default async function ProtectionZonesPage() {
     <main style={{ padding: 24, maxWidth: 1500, margin: "0 auto" }}>
       <p>
         <a href="/lab/fire-maintenance" style={{ color: "#0369a1", fontWeight: 800 }}>
-          ← Back to Fire Maintenance Dashboard
+          ? Back to Fire Maintenance Dashboard
         </a>
       </p>
 
@@ -88,54 +115,7 @@ export default async function ProtectionZonesPage() {
         <KpiCard title="Source" value="O&M" caption="Manual page 7–9" />
       </section>
 
-      <section style={panelStyle}>
-        <h2 style={{ marginTop: 0 }}>Protection Zone List</h2>
-
-        <div style={{ overflowX: "auto" }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Code</th>
-                <th style={thStyle}>Zone / Asset Name</th>
-                <th style={thStyle}>Area</th>
-                <th style={thStyle}>Location</th>
-                <th style={thStyle}>Fire Protection</th>
-                <th style={thStyle}>Fire Detection</th>
-                <th style={thStyle}>Actuation</th>
-                <th style={thStyle}>Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {zones.map((zone) => (
-                <tr key={zone.id}>
-                  <td style={tdStyle}>
-                    <strong>{formatText(zone.asset_code)}</strong>
-                    <div style={{ color: "#64748b" }}>Zone {formatText(zone.zone_no)}</div>
-                  </td>
-                  <td style={tdStyle}>
-                    <strong>{formatText(zone.asset_name)}</strong>
-                    <div style={{ color: "#64748b" }}>{formatText(zone.asset_type)}</div>
-                  </td>
-                  <td style={tdStyle}>{formatText(zone.area)}</td>
-                  <td style={tdStyle}>{formatText(zone.location)}</td>
-                  <td style={tdStyle}>{formatText(zone.fire_protection_type)}</td>
-                  <td style={tdStyle}>{formatText(zone.fire_detection_type)}</td>
-                  <td style={tdStyle}>{formatText(zone.actuation_type)}</td>
-                  <td style={tdStyle}>{formatText(zone.source_page)}</td>
-                </tr>
-              ))}
-
-              {zones.length === 0 && (
-                <tr>
-                  <td colSpan="8" style={{ ...tdStyle, color: "#64748b" }}>
-                    No protection zone data found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <ProtectionZonesClient zones={zones} />
     </main>
   );
 }
@@ -159,34 +139,3 @@ const kpiCardStyle = {
   padding: 18,
   boxShadow: "0 10px 25px rgba(15, 23, 42, 0.06)",
 };
-
-const panelStyle = {
-  background: "white",
-  border: "1px solid #e2e8f0",
-  borderRadius: 18,
-  padding: 18,
-  marginBottom: 18,
-  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.06)",
-};
-
-const tableStyle = {
-  width: "100%",
-  borderCollapse: "collapse",
-  fontSize: 14,
-};
-
-const thStyle = {
-  textAlign: "left",
-  padding: "10px",
-  background: "#f8fafc",
-  borderBottom: "1px solid #e2e8f0",
-  color: "#334155",
-  whiteSpace: "nowrap",
-};
-
-const tdStyle = {
-  padding: "10px",
-  borderBottom: "1px solid #e2e8f0",
-  verticalAlign: "top",
-};
-
