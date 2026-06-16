@@ -2,15 +2,19 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import EvidenceListClient from "./EvidenceListClient";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const PROJECT_CODE = "FIRE-MEI-2026";
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) return null;
 
@@ -22,32 +26,9 @@ function getSupabaseClient() {
   });
 }
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function monthInputToDate(value) {
   if (!value) return null;
   return `${value}-01`;
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  const text = String(value);
-  if (text.length < 10) return text;
-  return `${text.slice(8, 10)}/${text.slice(5, 7)}/${text.slice(0, 4)}`;
-}
-
-function formatMonth(value) {
-  if (!value) return "-";
-  const text = String(value);
-  if (text.length < 7) return text;
-  return `${text.slice(5, 7)}/${text.slice(0, 4)}`;
-}
-
-function badgeClass(value) {
-  const key = String(value || "default").toLowerCase().replaceAll("_", "-");
-  return `badge ${key}`;
 }
 
 async function createEvidence(formData) {
@@ -61,6 +42,10 @@ async function createEvidence(formData) {
 
   const projectId = formData.get("project_id");
   const uploadedFile = formData.get("evidence_file");
+
+  if (!projectId) {
+    redirect("/lab/fire-maintenance/evidence?error=project");
+  }
 
   let fileName = formData.get("file_name") || null;
   let filePath = formData.get("file_path") || null;
@@ -121,7 +106,9 @@ async function createEvidence(formData) {
   }
 
   revalidatePath("/lab/fire-maintenance/evidence");
+  revalidatePath("/lab/fire-maintenance/reports");
   revalidatePath("/lab/fire-maintenance/reports/print");
+  revalidatePath("/lab/fire-maintenance");
   redirect("/lab/fire-maintenance/evidence?created=1");
 }
 
@@ -135,30 +122,25 @@ async function loadPageData() {
     };
   }
 
-  const [projectRes, attachmentsRes, summaryRes] = await Promise.all([
-    supabase
-      .from("fire_projects")
-      .select("*")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("fire_attachments")
-      .select("*")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("v_fire_attachment_summary")
-      .select("*"),
-  ]);
+  const { data: project, error: projectError } = await supabase
+    .from("fire_projects")
+    .select("*")
+    .eq("project_code", PROJECT_CODE)
+    .maybeSingle();
 
-  const error = projectRes.error || attachmentsRes.error || summaryRes.error;
+  if (projectError) return { error: projectError.message };
+  if (!project) return { error: `Project not found: ${PROJECT_CODE}` };
 
-  if (error) return { error: error.message };
+  const { data: rawAttachments, error: attachmentError } = await supabase
+    .from("fire_attachments")
+    .select("*")
+    .eq("project_id", project.id)
+    .order("created_at", { ascending: false });
 
-  const rawAttachments = attachmentsRes.data || [];
+  if (attachmentError) return { error: attachmentError.message };
 
   const attachments = await Promise.all(
-    rawAttachments.map(async (item) => {
+    (rawAttachments || []).map(async (item) => {
       let signedUrl = item.file_url || null;
 
       if (!signedUrl && item.file_path) {
@@ -177,9 +159,8 @@ async function loadPageData() {
   );
 
   return {
-    project: projectRes.data,
+    project,
     attachments,
-    summary: summaryRes.data || [],
   };
 }
 
@@ -203,6 +184,7 @@ export default async function FireEvidencePage({ searchParams }) {
 
   const created = params?.created;
   const error = params?.error;
+  const showForm = params?.new === "1";
 
   const photoCount = attachments.filter((item) => item.evidence_type === "photo").length;
   const testCount = attachments.filter((item) => item.evidence_type === "test_result").length;
@@ -216,7 +198,9 @@ export default async function FireEvidencePage({ searchParams }) {
 
       <section className="hero">
         <div>
-          <Link href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</Link>
+          <Link href="/lab/fire-maintenance" style={backLinkStyle}>
+            Back to Fire Maintenance Dashboard
+          </Link>
 
           <div className="eyebrow">Fire Maintenance Pro</div>
           <h1>Evidence / Attachments</h1>
@@ -264,177 +248,154 @@ export default async function FireEvidencePage({ searchParams }) {
         </div>
       </section>
 
-      <section className="two-col">
-        <form action={createEvidence} className="panel">
+      {showForm && (
+        <form action={createEvidence} className="panel form-panel">
           <div className="panel-head">
             <h2>New Evidence</h2>
             <p>Upload evidence file langsung ke Supabase Storage atau input manual URL/path bila file sudah tersedia.</p>
+
+            <Link href="/lab/fire-maintenance/evidence" className="cancel-link">
+              Cancel
+            </Link>
           </div>
 
           <input type="hidden" name="project_id" value={project?.id || ""} />
 
-          <label>
-            Evidence Title
-            <input
-              type="text"
-              name="title"
-              required
-              placeholder="Contoh: Foto pressure gauge FM-200"
-            />
-          </label>
+          <div className="form-grid">
+            <label className="wide">
+              Evidence Title
+              <input
+                type="text"
+                name="title"
+                required
+                placeholder="Contoh: Foto pressure gauge FM-200"
+              />
+            </label>
 
-          <label>
-            Reference Type
-            <select name="reference_type" defaultValue="inspection">
-              <option value="project">Project</option>
-              <option value="schedule">Schedule</option>
-              <option value="inspection">Inspection</option>
-              <option value="finding">Finding</option>
-              <option value="training">Training</option>
-              <option value="report">Report</option>
-              <option value="scope">Scope</option>
-            </select>
-          </label>
+            <label>
+              Reference Type
+              <select name="reference_type" defaultValue="inspection">
+                <option value="project">Project</option>
+                <option value="schedule">Schedule</option>
+                <option value="inspection">Inspection</option>
+                <option value="finding">Finding</option>
+                <option value="training">Training</option>
+                <option value="report">Report</option>
+                <option value="scope">Scope</option>
+              </select>
+            </label>
 
-          <label>
-            Evidence Type
-            <select name="evidence_type" defaultValue="photo">
-              <option value="photo">Photo</option>
-              <option value="test_result">Test Result</option>
-              <option value="checklist">Checklist</option>
-              <option value="signed_report">Signed Report</option>
-              <option value="attendance">Training Attendance</option>
-              <option value="material_recommendation">Material Recommendation</option>
-              <option value="document">Document</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
+            <label>
+              Evidence Type
+              <select name="evidence_type" defaultValue="photo">
+                <option value="photo">Photo</option>
+                <option value="test_result">Test Result</option>
+                <option value="checklist">Checklist</option>
+                <option value="signed_report">Signed Report</option>
+                <option value="attendance">Training Attendance</option>
+                <option value="material_recommendation">Material Recommendation</option>
+                <option value="document">Document</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
 
-          <label>
-            Report Type
-            <select name="report_type" defaultValue="">
-              <option value="">Not report-specific</option>
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">3 Month / Quarterly</option>
-              <option value="semester">6 Month / Semiannual</option>
-              <option value="annual">Annual</option>
-            </select>
-          </label>
+            <label>
+              Report Type
+              <select name="report_type" defaultValue="">
+                <option value="">Not report-specific</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">3 Month / Quarterly</option>
+                <option value="semester">6 Month / Semiannual</option>
+                <option value="annual">Annual</option>
+              </select>
+            </label>
 
-          <label>
-            Report Month
-            <input type="month" name="report_month" />
-          </label>
+            <label>
+              Report Month
+              <input type="month" name="report_month" />
+            </label>
 
-          <label>
-            Upload File
-            <input
-              type="file"
-              name="evidence_file"
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-            />
-          </label>
+            <label className="wide">
+              Upload File
+              <input
+                type="file"
+                name="evidence_file"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+              />
+            </label>
 
-          <label>
-            File Name
-            <input
-              type="text"
-              name="file_name"
-              placeholder="Optional bila tidak upload file"
-            />
-          </label>
+            <label>
+              File Name
+              <input
+                type="text"
+                name="file_name"
+                placeholder="Optional bila tidak upload file"
+              />
+            </label>
 
-          <label>
-            File URL
-            <input
-              type="text"
-              name="file_url"
-              placeholder="https://... atau signed URL"
-            />
-          </label>
+            <label>
+              File URL
+              <input
+                type="text"
+                name="file_url"
+                placeholder="https://... atau signed URL"
+              />
+            </label>
 
-          <label>
-            File Path
-            <input
-              type="text"
-              name="file_path"
-              placeholder="fire-maintenance/evidence/..."
-            />
-          </label>
+            <label className="wide">
+              File Path
+              <input
+                type="text"
+                name="file_path"
+                placeholder="fire-maintenance/evidence/..."
+              />
+            </label>
 
-          <label>
-            Uploaded By
-            <input
-              type="text"
-              name="uploaded_by"
-              defaultValue="Fire Kelas A Support"
-            />
-          </label>
+            <label>
+              Uploaded By
+              <input
+                type="text"
+                name="uploaded_by"
+                defaultValue="Fire Kelas A Support"
+              />
+            </label>
 
-          <label>
-            Description
-            <textarea
-              name="description"
-              rows="4"
-              placeholder="Catatan evidence, lokasi, hasil test, atau referensi finding..."
-            />
-          </label>
+            <label className="wide">
+              Description
+              <textarea
+                name="description"
+                rows="4"
+                placeholder="Catatan evidence, lokasi, hasil test, atau referensi finding..."
+              />
+            </label>
+          </div>
 
-          <button type="submit">Save Evidence</button>
+          <button type="submit" className="submit-button">
+            Save Evidence
+          </button>
         </form>
+      )}
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Evidence List</h2>
-            <p>Daftar lampiran yang sudah diregister.</p>
-          </div>
-
-          <div className="evidence-list">
-            {attachments.map((item) => (
-              <div className="evidence-card" key={item.id}>
-                <div className="evidence-top">
-                  <strong>{item.title}</strong>
-                  <span className={badgeClass(item.evidence_type)}>
-                    {item.evidence_type}
-                  </span>
-                </div>
-
-                <div className="evidence-meta">
-                  Ref: {item.reference_type} · Report: {item.report_type || "-"} · Month:{" "}
-                  {formatMonth(item.report_month)}
-                </div>
-
-                <div className="evidence-meta">
-                  File: {item.file_name || "-"}
-                </div>
-
-                {item.signed_url && (
-                  <a className="file-link" href={item.signed_url} target="_blank">
-                    Open File →
-                  </a>
-                )}
-
-                {item.file_path && (
-                  <div className="file-path">Path: {item.file_path}</div>
-                )}
-
-                <div className="evidence-desc">{item.description || "-"}</div>
-
-                <div className="evidence-meta">
-                  Uploaded by: {item.uploaded_by || "-"} · {formatDate(item.created_at)}
-                </div>
-              </div>
-            ))}
-
-            {attachments.length === 0 && (
-              <div className="empty-box">Belum ada evidence.</div>
-            )}
-          </div>
-        </section>
-      </section>
+      <EvidenceListClient attachments={attachments} />
     </main>
   );
 }
+
+const backLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 40,
+  padding: "0 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "white",
+  color: "#0369a1",
+  fontWeight: 900,
+  fontSize: 14,
+  textDecoration: "none",
+  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
+};
 
 const css = `
   .page {
@@ -447,17 +408,9 @@ const css = `
 
   .hero {
     display: grid;
-    grid-template-columns: 1fr 360px;
+    grid-template-columns: minmax(0, 1fr) 360px;
     gap: 20px;
     margin-bottom: 18px;
-  }
-
-  .back-link {
-    display: inline-flex;
-    margin-bottom: 16px;
-    color: #ea580c;
-    text-decoration: none;
-    font-weight: 900;
   }
 
   .eyebrow {
@@ -466,7 +419,7 @@ const css = `
     font-weight: 900;
     letter-spacing: .4px;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin: 16px 0 8px;
   }
 
   h1 {
@@ -516,15 +469,9 @@ const css = `
 
   .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
     margin-bottom: 14px;
-  }
-
-  .two-col {
-    display: grid;
-    grid-template-columns: 420px 1fr;
-    gap: 14px;
   }
 
   .kpi-card,
@@ -534,6 +481,10 @@ const css = `
     border-radius: 18px;
     padding: 18px;
     box-shadow: 0 8px 20px rgba(15,23,42,.04);
+  }
+
+  .form-panel {
+    margin-bottom: 14px;
   }
 
   .kpi-label {
@@ -557,10 +508,27 @@ const css = `
     margin-bottom: 14px;
   }
 
+  .cancel-link {
+    display: inline-flex;
+    margin-top: 10px;
+    color: #0369a1;
+    text-decoration: none;
+    font-weight: 900;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .wide {
+    grid-column: 1 / -1;
+  }
+
   label {
     display: grid;
     gap: 6px;
-    margin-bottom: 12px;
     color: #334155;
     font-size: 13px;
     font-weight: 900;
@@ -572,7 +540,7 @@ const css = `
     width: 100%;
     box-sizing: border-box;
     border: 1px solid #cbd5e1;
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 10px 12px;
     font-size: 14px;
     color: #0f172a;
@@ -583,97 +551,16 @@ const css = `
     resize: vertical;
   }
 
-  button {
+  .submit-button {
+    margin-top: 14px;
     border: none;
     background: #ea580c;
     color: white;
     font-weight: 900;
-    border-radius: 12px;
-    padding: 11px 14px;
+    border-radius: 8px;
+    padding: 11px 16px;
     cursor: pointer;
     box-shadow: 0 8px 18px rgba(234,88,12,.22);
-  }
-
-  button:hover {
-    background: #c2410c;
-  }
-
-  .evidence-list {
-    display: grid;
-    gap: 10px;
-  }
-
-  .evidence-card {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 12px;
-  }
-
-  .evidence-top {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-
-  .evidence-top strong {
-    color: #ea580c;
-  }
-
-  .evidence-meta,
-  .evidence-desc,
-  .file-path {
-    color: #64748b;
-    font-size: 12px;
-    line-height: 1.5;
-    margin-bottom: 6px;
-  }
-
-  .file-link {
-    display: inline-flex;
-    margin-bottom: 8px;
-    color: #047857;
-    font-weight: 900;
-    text-decoration: none;
-  }
-
-  .badge {
-    display: inline-flex;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #334155;
-    text-transform: capitalize;
-    white-space: nowrap;
-  }
-
-  .badge.photo {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #bfdbfe;
-  }
-
-  .badge.test-result {
-    background: #ecfdf5;
-    color: #047857;
-    border-color: #a7f3d0;
-  }
-
-  .badge.signed-report,
-  .badge.document {
-    background: #fff7ed;
-    color: #c2410c;
-    border-color: #fed7aa;
-  }
-
-  .badge.attendance {
-    background: #fefce8;
-    color: #a16207;
-    border-color: #fde68a;
   }
 
   .success-box {
@@ -695,35 +582,11 @@ const css = `
     margin-bottom: 14px;
   }
 
-  .empty-box {
-    color: #64748b;
-    padding: 18px;
-    text-align: center;
-    border: 1px dashed #cbd5e1;
-    border-radius: 14px;
-  }
-
   @media (max-width: 900px) {
     .hero,
-    .two-col,
+    .form-grid,
     .kpi-grid {
       grid-template-columns: 1fr;
     }
   }
 `;
-
-const backLinkStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  height: 40,
-  padding: "0 14px",
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-  background: "white",
-  color: "#0369a1",
-  fontWeight: 900,
-  fontSize: 14,
-  textDecoration: "none",
-  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
-};
