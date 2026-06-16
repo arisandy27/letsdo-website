@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +127,21 @@ export default async function FireMaintenancePage() {
           </p>
 
           <p style={{ marginTop: 18 }}>
+            <a
+              href="/lab/fire-maintenance/project-setup"
+              style={{
+                display: "inline-flex",
+                background: "#0f172a",
+                color: "white",
+                textDecoration: "none",
+                fontWeight: 900,
+                padding: "10px 14px",
+                borderRadius: 12,
+                marginRight: 10,
+              }}
+            >
+              Project Setup / Contract Setup
+            </a>
             <a
               href="/lab/fire-maintenance/asset-register"
               style={{
@@ -374,6 +389,12 @@ export default async function FireMaintenancePage() {
           <div className="project-meta">{project.site_name || "-"}</div>
           <div className="project-meta">Client: {project.client_name || "-"}</div>
           <div className="project-meta">Vendor: {project.vendor_name || "-"}</div>
+          <div className="project-meta">
+            Status: {String(project.project_status || "bidding").replaceAll("_", " ")}
+          </div>
+          <div className="project-meta">
+            Timeline Basis: {String(project.timeline_basis || "working_schedule").replaceAll("_", " ")}
+          </div>
         </div>
       </section>
 

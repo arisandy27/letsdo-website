@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import TimelineScopeClient from "./TimelineScopeClient";
 
 export const dynamic = "force-dynamic";
+
+const PROJECT_CODE = "FIRE-MEI-2026";
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) return null;
 
@@ -46,11 +50,6 @@ function clampPercent(value) {
   return num;
 }
 
-function badgeClass(value) {
-  const key = String(value || "default").toLowerCase().replaceAll("_", "-");
-  return `badge ${key}`;
-}
-
 function frequencyLabel(value) {
   const labels = {
     weekly: "Weekly",
@@ -78,8 +77,7 @@ async function loadTimelineData() {
       supabase
         .from("fire_projects")
         .select("*")
-        .order("created_at", { ascending: true })
-        .limit(1)
+        .eq("project_code", PROJECT_CODE)
         .maybeSingle(),
       supabase
         .from("v_fire_contract_progress")
@@ -164,13 +162,28 @@ export default async function FireTimelinePage() {
   const overdue = scopeRows.filter((item) => item.scope_status === "overdue");
   const dueSoon = scopeRows.filter((item) => item.scope_status === "due_soon");
 
+  const progressGap =
+    Number(contract.time_progress_percent || 0) -
+    Number(contract.work_progress_percent || 0);
+
+  const timelineInsight =
+    overdue.length > 0
+      ? `${overdue.length} scope item(s) are overdue and need follow-up.`
+      : notScheduled.length > 0
+        ? `${notScheduled.length} scope item(s) are not scheduled yet. Generate or verify schedule coverage.`
+        : dueSoon.length > 0
+          ? `${dueSoon.length} scope item(s) are due soon in the next 14 days.`
+          : "Timeline coverage is under control based on current scope progress.";
+
   return (
     <main className="page">
       <style>{css}</style>
 
       <section className="hero">
         <div>
-          <Link href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</Link>
+          <Link href="/lab/fire-maintenance" style={backLinkStyle}>
+            Back to Fire Maintenance Dashboard
+          </Link>
 
           <div className="eyebrow">Fire Maintenance Pro</div>
           <h1>Timeline & Scope Progress</h1>
@@ -214,12 +227,24 @@ export default async function FireTimelinePage() {
         </div>
 
         <div className="contract-card">
-          <div className="label">Schedule Status</div>
-          <div className="status-line">
-            <span>Done: {contract.done_schedule || 0}</span>
-            <span>Planned: {contract.planned_schedule || 0}</span>
-            <span>Overdue: {contract.overdue_schedule || 0}</span>
+          <div className="label">Progress Gap</div>
+          <div className="big">{Math.round(progressGap * 10) / 10}%</div>
+          <div className="note">
+            Positive means time progress is ahead of work progress.
           </div>
+        </div>
+      </section>
+
+      <section className="panel timeline-insight">
+        <div>
+          <h2>Timeline Insight</h2>
+          <p>{timelineInsight}</p>
+        </div>
+
+        <div className="status-line horizontal">
+          <span>Done: {contract.done_schedule || 0}</span>
+          <span>Planned: {contract.planned_schedule || 0}</span>
+          <span>Overdue: {contract.overdue_schedule || 0}</span>
         </div>
       </section>
 
@@ -313,64 +338,18 @@ export default async function FireTimelinePage() {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Scope Item Progress</h2>
-          <p>Status tiap item lingkup pekerjaan agar tidak ada yang terlewat.</p>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Frequency</th>
-                <th>System</th>
-                <th>Scope Item</th>
-                <th>Total</th>
-                <th>Done</th>
-                <th>Overdue</th>
-                <th>Next Planned</th>
-                <th>Progress</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {scopeRows.map((row) => (
-                <tr key={row.scope_template_id}>
-                  <td>
-                    <span className={badgeClass(row.scope_status)}>
-                      {String(row.scope_status || "-").replaceAll("_", " ")}
-                    </span>
-                  </td>
-                  <td>{frequencyLabel(row.frequency)}</td>
-                  <td>{row.system_group}</td>
-                  <td>
-                    <strong>{row.scope_title}</strong>
-                    <br />
-                    <span>
-                      Photo: {row.requires_photo ? "Required" : "-"} · Test:{" "}
-                      {row.requires_test_result ? "Required" : "-"}
-                    </span>
-                  </td>
-                  <td>{row.total_schedule || 0}</td>
-                  <td>{row.done_schedule || 0}</td>
-                  <td>{row.overdue_schedule || 0}</td>
-                  <td>{formatDate(row.next_planned_date)}</td>
-                  <td>
-                    <ProgressBar value={row.progress_percent || 0} />
-                  </td>
+              {monthly.length === 0 && (
+                <tr>
+                  <td colSpan="6">No monthly timeline data.</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
       </section>
+
+      <TimelineScopeClient scopeRows={scopeRows} />
     </main>
   );
 }
@@ -391,21 +370,13 @@ const css = `
     margin-bottom: 18px;
   }
 
-  .back-link {
-    display: inline-flex;
-    margin-bottom: 16px;
-    color: #ea580c;
-    text-decoration: none;
-    font-weight: 900;
-  }
-
   .eyebrow {
     color: #ea580c;
     font-size: 12px;
     font-weight: 900;
     letter-spacing: .4px;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin: 16px 0 8px;
   }
 
   h1 {
@@ -471,6 +442,14 @@ const css = `
     box-shadow: 0 8px 20px rgba(15,23,42,.04);
   }
 
+  .timeline-insight {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
   .label,
   .kpi-label {
     color: #64748b;
@@ -505,6 +484,19 @@ const css = `
     color: #334155;
     font-size: 13px;
     font-weight: 800;
+  }
+
+  .status-line.horizontal {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .status-line.horizontal span {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 8px 10px;
   }
 
   .panel {
@@ -597,50 +589,6 @@ const css = `
   td span {
     color: #64748b;
     font-size: 12px;
-  }
-
-  .badge {
-    display: inline-flex;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #334155;
-    text-transform: capitalize;
-    white-space: nowrap;
-  }
-
-  .badge.completed {
-    background: #ecfdf5;
-    color: #047857;
-    border-color: #a7f3d0;
-  }
-
-  .badge.in-progress,
-  .badge.due-soon {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #bfdbfe;
-  }
-
-  .badge.planned {
-    background: #f8fafc;
-    color: #334155;
-    border-color: #cbd5e1;
-  }
-
-  .badge.overdue {
-    background: #fef2f2;
-    color: #b91c1c;
-    border-color: #fecaca;
-  }
-
-  .badge.not-scheduled {
-    background: #fff7ed;
-    color: #c2410c;
-    border-color: #fed7aa;
   }
 
   .error-box {
