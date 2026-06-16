@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import AssetVerificationClient from "./AssetVerificationClient";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +26,6 @@ function getSupabaseAdmin() {
       autoRefreshToken: false,
     },
   });
-}
-
-function formatText(value) {
-  return value || "-";
 }
 
 function countBy(items, predicate) {
@@ -61,6 +59,10 @@ async function markSiteVerified(formData) {
   revalidatePath("/lab/fire-maintenance/asset-verification");
   revalidatePath("/lab/fire-maintenance/asset-register");
   revalidatePath("/lab/fire-maintenance/scope-mapping");
+  revalidatePath("/lab/fire-maintenance/data-readiness");
+  revalidatePath("/lab/fire-maintenance/timeline");
+  revalidatePath("/lab/fire-maintenance/reports");
+  revalidatePath("/lab/fire-maintenance");
   redirect("/lab/fire-maintenance/asset-verification?verified=1");
 }
 
@@ -91,6 +93,10 @@ async function markNeedsVerification(formData) {
   revalidatePath("/lab/fire-maintenance/asset-verification");
   revalidatePath("/lab/fire-maintenance/asset-register");
   revalidatePath("/lab/fire-maintenance/scope-mapping");
+  revalidatePath("/lab/fire-maintenance/data-readiness");
+  revalidatePath("/lab/fire-maintenance/timeline");
+  revalidatePath("/lab/fire-maintenance/reports");
+  revalidatePath("/lab/fire-maintenance");
   redirect("/lab/fire-maintenance/asset-verification?needs=1");
 }
 
@@ -127,46 +133,65 @@ export default async function AssetVerificationPage({ searchParams }) {
   const zones = countBy(assets, (item) => item.asset_level === "protection_zone");
   const devices = countBy(assets, (item) => item.asset_level === "device");
 
+  const projectStatus = project?.project_status || "bidding";
+  const timelineBasis = project?.timeline_basis || "working_schedule";
+
   if (error) {
     return (
-      <main style={{ padding: 24 }}>
-        <h1>Asset Verification</h1>
-        <p style={{ color: "#dc2626", fontWeight: 800 }}>
-          Failed to load asset verification data.
-        </p>
-        <pre>{error.message}</pre>
+      <main className="page">
+        <style>{css}</style>
+        <section className="error-box">
+          <h1>Asset Verification</h1>
+          <p>Failed to load asset verification data.</p>
+          <pre>{error.message}</pre>
+        </section>
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 1500, margin: "0 auto" }}>
-      <p>
-        <a href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</a>
-      </p>
+    <main className="page">
+      <style>{css}</style>
 
-      <section style={heroStyle}>
+      <section className="hero">
         <div>
-          <div style={eyebrowStyle}>FIRE MAINTENANCE PRO</div>
-          <h1 style={heroTitleStyle}>Asset Verification</h1>
-          <p style={heroTextStyle}>
-            Review document-based and seed/manual asset records, then mark assets as
-            site verified after field confirmation. Verified assets can be used for official
-            maintenance mapping and schedule generation.
+          <Link href="/lab/fire-maintenance" style={backLinkStyle}>
+            Back to Fire Maintenance Dashboard
+          </Link>
+
+          <div className="eyebrow">Fire Maintenance Pro</div>
+          <h1>Asset Verification</h1>
+          <p>
+            Review document-based and seed/manual asset records, then mark assets
+            as site verified after field confirmation. Verified assets can be used
+            for official maintenance mapping and schedule generation.
           </p>
+
+          <div className="hero-actions">
+            <Link href="/lab/fire-maintenance/asset-register" className="primary-link">
+              Asset Register
+            </Link>
+            <Link href="/lab/fire-maintenance/scope-mapping" className="secondary-link">
+              Scope Mapping
+            </Link>
+            <Link href="/lab/fire-maintenance/data-readiness" className="secondary-link">
+              Data Readiness
+            </Link>
+            <Link href="/lab/fire-maintenance/project-setup" className="secondary-link">
+              Project Setup
+            </Link>
+          </div>
         </div>
 
-        <div style={projectCardStyle}>
-          <div style={projectLabelStyle}>PROJECT</div>
-          <h2 style={{ margin: "8px 0", color: "white" }}>
+        <div className="project-box">
+          <div className="project-label">Project</div>
+          <div className="project-title">
             {project?.project_name || "Fire Protection Maintenance Support"}
-          </h2>
-          <p style={{ margin: "4px 0", color: "#cbd5e1" }}>
-            Client: {project?.client_name || "PT Merak Energi Indonesia"}
-          </p>
-          <p style={{ margin: "4px 0", color: "#cbd5e1" }}>
-            Vendor: {project?.vendor_name || "PT Mitra Media Visindo"}
-          </p>
+          </div>
+          <div className="project-meta">Client: {project?.client_name || "-"}</div>
+          <div className="project-meta">Vendor: {project?.vendor_name || "-"}</div>
+          <div className="project-meta">Status: {String(projectStatus).replaceAll("_", " ")}</div>
+          <div className="project-meta">Timeline: {String(timelineBasis).replaceAll("_", " ")}</div>
         </div>
       </section>
 
@@ -174,7 +199,21 @@ export default async function AssetVerificationPage({ searchParams }) {
       {params?.needs && <Alert text="Asset returned to needs verification." />}
       {params?.error && <ErrorAlert text={`Action failed: ${params.error}`} />}
 
-      <section style={kpiGridStyle}>
+      <section className="mode-card">
+        <div>
+          <div className="mode-label">Verification Rule</div>
+          <h2>Documented to Site Verified</h2>
+          <p>
+            Data dari proposal/O&M/manual masih dianggap documented. Setelah field
+            check, ubah menjadi site verified agar siap dipakai untuk official mapping
+            dan official schedule.
+          </p>
+        </div>
+
+        <div className="mode-badge">Controlled Data</div>
+      </section>
+
+      <section className="kpi-grid">
         <KpiCard title="Total Assets" value={total} caption="All records" />
         <KpiCard title="Documented" value={documented} caption="From source document" />
         <KpiCard title="Site Verified" value={siteVerified} caption="Field confirmed" />
@@ -182,276 +221,227 @@ export default async function AssetVerificationPage({ searchParams }) {
         <KpiCard title="Asset Layers" value={`${equipment}/${zones}/${devices}`} caption="Equipment / Zone / Device" />
       </section>
 
-      <section style={panelStyle}>
-        <h2 style={{ marginTop: 0 }}>Verification List</h2>
-
-        <div style={{ overflowX: "auto" }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Asset</th>
-                <th style={thStyle}>Level</th>
-                <th style={thStyle}>Area / Location</th>
-                <th style={thStyle}>Source</th>
-                <th style={thStyle}>Verification</th>
-                <th style={thStyle}>Verified By</th>
-                <th style={thStyle}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((asset) => (
-                <tr key={asset.id}>
-                  <td style={tdStyle}>
-                    <strong>{asset.asset_code}</strong>
-                    <div>{asset.asset_name}</div>
-                    <div style={{ color: "#64748b" }}>{formatText(asset.asset_type)}</div>
-                  </td>
-                  <td style={tdStyle}>{formatText(asset.asset_level || "equipment")}</td>
-                  <td style={tdStyle}>
-                    <div>{formatText(asset.area)}</div>
-                    <div style={{ color: "#64748b" }}>{formatText(asset.location)}</div>
-                  </td>
-                  <td style={tdStyle}>
-                    <div>{formatText(asset.data_source)}</div>
-                    <div style={{ color: "#64748b" }}>{formatText(asset.source_page)}</div>
-                  </td>
-                  <td style={tdStyle}>
-                    <StatusBadge status={asset.verification_status || "draft"} />
-                  </td>
-                  <td style={tdStyle}>
-                    <div>{formatText(asset.verified_by)}</div>
-                    <div style={{ color: "#64748b" }}>
-                      {asset.verified_at ? new Date(asset.verified_at).toLocaleString("en-GB") : "-"}
-                    </div>
-                  </td>
-                  <td style={tdStyle}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <form action={markSiteVerified}>
-                        <input type="hidden" name="asset_id" value={asset.id} />
-                        <button type="submit" style={successButtonStyle}>
-                          Site Verify
-                        </button>
-                      </form>
-
-                      <form action={markNeedsVerification}>
-                        <input type="hidden" name="asset_id" value={asset.id} />
-                        <button type="submit" style={secondaryButtonStyle}>
-                          Needs Review
-                        </button>
-                      </form>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {assets.length === 0 && (
-                <tr>
-                  <td colSpan="7" style={{ ...tdStyle, color: "#64748b" }}>
-                    No asset data found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <AssetVerificationClient
+        assets={assets}
+        markSiteVerifiedAction={markSiteVerified}
+        markNeedsVerificationAction={markNeedsVerification}
+      />
     </main>
   );
 }
 
 function Alert({ text }) {
-  return (
-    <div style={alertStyle}>
-      {text}
-    </div>
-  );
+  return <div className="success-box">{text}</div>;
 }
 
 function ErrorAlert({ text }) {
-  return (
-    <div style={errorAlertStyle}>
-      {text}
-    </div>
-  );
+  return <div className="error-box">{text}</div>;
 }
 
 function KpiCard({ title, value, caption }) {
   return (
-    <div style={kpiCardStyle}>
-      <div style={kpiTitleStyle}>{title}</div>
-      <div style={kpiValueStyle}>{value}</div>
-      <div style={kpiCaptionStyle}>{caption}</div>
+    <div className="kpi-card">
+      <div className="kpi-label">{title}</div>
+      <div className="kpi-value">{value}</div>
+      <div className="kpi-note">{caption}</div>
     </div>
   );
 }
 
-function StatusBadge({ status }) {
-  const colorMap = {
-    documented: ["#e0f2fe", "#075985"],
-    site_verified: ["#dcfce7", "#166534"],
-    needs_verification: ["#fef3c7", "#92400e"],
-    draft: ["#f1f5f9", "#475569"],
-  };
+const css = `
+  .page {
+    min-height: 100vh;
+    background: #f8fafc;
+    color: #0f172a;
+    padding: 24px;
+    font-family: Arial, sans-serif;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
 
-  const [background, color] = colorMap[status] || ["#f1f5f9", "#475569"];
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 20px;
+    margin-bottom: 18px;
+  }
 
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        background,
-        color,
-        padding: "5px 8px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 900,
-      }}
-    >
-      {status}
-    </span>
-  );
-}
+  .eyebrow {
+    color: #ea580c;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    margin: 16px 0 8px;
+  }
 
-const heroStyle = {
-  display: "grid",
-  gridTemplateColumns: "1fr 360px",
-  gap: 20,
-  alignItems: "center",
-  marginBottom: 20,
-};
+  h1 {
+    margin: 0 0 10px;
+    font-size: 34px;
+    letter-spacing: -1px;
+  }
 
-const eyebrowStyle = {
-  color: "#ea580c",
-  fontWeight: 900,
-  letterSpacing: 2,
-  fontSize: 13,
-};
+  h2 {
+    margin: 0 0 8px;
+    font-size: 20px;
+  }
 
-const heroTitleStyle = {
-  margin: "8px 0",
-  fontSize: 34,
-  color: "#0f172a",
-};
+  p {
+    color: #64748b;
+    line-height: 1.55;
+    margin: 0;
+  }
 
-const heroTextStyle = {
-  color: "#64748b",
-  maxWidth: 850,
-};
+  .hero-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
 
-const projectCardStyle = {
-  background: "#0f172a",
-  color: "white",
-  padding: 20,
-  borderRadius: 18,
-};
+  .primary-link,
+  .secondary-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 42px;
+    padding: 0 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 900;
+  }
 
-const projectLabelStyle = {
-  color: "#fed7aa",
-  fontWeight: 900,
-  letterSpacing: 1.5,
-  fontSize: 12,
-};
+  .primary-link {
+    background: #ea580c;
+    color: white;
+  }
 
-const kpiGridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-  gap: 14,
-  marginBottom: 18,
-};
+  .secondary-link {
+    background: white;
+    color: #0369a1;
+    border: 1px solid #cbd5e1;
+  }
 
-const kpiCardStyle = {
-  background: "white",
-  border: "1px solid #e2e8f0",
-  borderRadius: 16,
-  padding: 18,
-  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.06)",
-};
+  .project-box {
+    background: #0f172a;
+    color: white;
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 14px 30px rgba(15,23,42,.16);
+  }
 
-const kpiTitleStyle = {
-  color: "#64748b",
-  fontWeight: 900,
-  fontSize: 13,
-};
+  .project-label {
+    color: #fed7aa;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
 
-const kpiValueStyle = {
-  color: "#0f172a",
-  fontWeight: 950,
-  fontSize: 34,
-  marginTop: 8,
-};
+  .project-title {
+    font-size: 20px;
+    font-weight: 900;
+    margin-bottom: 10px;
+  }
 
-const kpiCaptionStyle = {
-  color: "#64748b",
-  fontSize: 13,
-};
+  .project-meta {
+    color: #cbd5e1;
+    font-size: 13px;
+    line-height: 1.6;
+  }
 
-const panelStyle = {
-  background: "white",
-  border: "1px solid #e2e8f0",
-  borderRadius: 18,
-  padding: 18,
-  marginBottom: 18,
-  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.06)",
-};
+  .mode-card,
+  .kpi-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 8px 20px rgba(15,23,42,.04);
+  }
 
-const tableStyle = {
-  width: "100%",
-  borderCollapse: "collapse",
-  fontSize: 14,
-};
+  .mode-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 14px;
+  }
 
-const thStyle = {
-  textAlign: "left",
-  padding: "10px",
-  background: "#f8fafc",
-  borderBottom: "1px solid #e2e8f0",
-  color: "#334155",
-  whiteSpace: "nowrap",
-};
+  .mode-label {
+    color: #ea580c;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
 
-const tdStyle = {
-  padding: "10px",
-  borderBottom: "1px solid #e2e8f0",
-  verticalAlign: "top",
-};
+  .mode-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 42px;
+    padding: 0 16px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    color: #047857;
+    font-size: 13px;
+    font-weight: 950;
+  }
 
-const successButtonStyle = {
-  background: "#16a34a",
-  color: "white",
-  border: 0,
-  borderRadius: 10,
-  padding: "8px 10px",
-  fontWeight: 800,
-  cursor: "pointer",
-};
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 14px;
+  }
 
-const secondaryButtonStyle = {
-  background: "#475569",
-  color: "white",
-  border: 0,
-  borderRadius: 10,
-  padding: "8px 10px",
-  fontWeight: 800,
-  cursor: "pointer",
-};
+  .kpi-label {
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 900;
+  }
 
-const alertStyle = {
-  background: "#dcfce7",
-  color: "#166534",
-  padding: "12px 14px",
-  borderRadius: 12,
-  marginBottom: 14,
-  fontWeight: 800,
-};
+  .kpi-value {
+    color: #0f172a;
+    font-weight: 950;
+    font-size: 34px;
+    margin-top: 8px;
+  }
 
-const errorAlertStyle = {
-  background: "#fee2e2",
-  color: "#991b1b",
-  padding: "12px 14px",
-  borderRadius: 12,
-  marginBottom: 14,
-  fontWeight: 800,
-};
+  .kpi-note {
+    color: #64748b;
+    font-size: 13px;
+  }
+
+  .success-box,
+  .error-box {
+    border-radius: 14px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-weight: 800;
+  }
+
+  .success-box {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #047857;
+  }
+
+  .error-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+  }
+
+  @media (max-width: 1000px) {
+    .hero,
+    .kpi-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+`;
 
 const backLinkStyle = {
   display: "inline-flex",
