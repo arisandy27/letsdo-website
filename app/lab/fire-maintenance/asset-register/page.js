@@ -1,4 +1,5 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+import AssetRegisterClient from "./AssetRegisterClient";
 
 export const dynamic = "force-dynamic";
 
@@ -30,16 +31,41 @@ function countBy(items, predicate) {
 export default async function AssetRegisterHubPage() {
   const supabase = getSupabaseAdmin();
 
-  const { data: project } = await supabase
+  const { data: project, error: projectError } = await supabase
     .from("fire_projects")
     .select("*")
     .eq("project_code", PROJECT_CODE)
     .maybeSingle();
 
+  if (projectError) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Asset Register</h1>
+        <p style={{ color: "#dc2626", fontWeight: 800 }}>
+          Failed to load fire project.
+        </p>
+        <pre>{projectError.message}</pre>
+      </main>
+    );
+  }
+
+  if (!project) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Asset Register</h1>
+        <p style={{ color: "#dc2626", fontWeight: 800 }}>
+          Fire project not found: {PROJECT_CODE}
+        </p>
+      </main>
+    );
+  }
+
   const { data: assetsRaw, error } = await supabase
     .from("fire_assets")
-    .select("id, asset_code, asset_name, asset_type, asset_level, status, criticality")
-    .eq("project_id", project?.id || "00000000-0000-0000-0000-000000000000");
+    .select("*")
+    .eq("project_id", project.id)
+    .order("asset_level", { ascending: true })
+    .order("asset_code", { ascending: true });
 
   const assets = assetsRaw || [];
 
@@ -49,8 +75,10 @@ export default async function AssetRegisterHubPage() {
   );
   const zoneCount = countBy(assets, (item) => item.asset_level === "protection_zone");
   const deviceCount = countBy(assets, (item) => item.asset_level === "device");
-  const activeCount = countBy(assets, (item) => item.status === "active");
-  const highCriticality = countBy(assets, (item) => item.criticality === "high");
+  const highCriticality = countBy(
+    assets,
+    (item) => String(item.criticality || "").toLowerCase() === "high"
+  );
 
   if (error) {
     return (
@@ -65,11 +93,9 @@ export default async function AssetRegisterHubPage() {
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 1300, margin: "0 auto" }}>
+    <main style={{ padding: 24, maxWidth: 1500, margin: "0 auto" }}>
       <p>
-        <a href="/lab/fire-maintenance" style={{ color: "#0369a1", fontWeight: 800 }}>
-          ← Back to Fire Maintenance Dashboard
-        </a>
+        <a href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</a>
       </p>
 
       <section style={heroStyle}>
@@ -111,7 +137,7 @@ export default async function AssetRegisterHubPage() {
           badge={`${equipmentCount} records`}
           description="Main maintainable fire protection assets such as panels, CO2/FM-200 systems, hydrant, deluge, foam, APAR, and SCBA."
           href="/lab/fire-maintenance/assets"
-          cta="Open Equipment Register →"
+          cta="Open Equipment Register"
         />
 
         <RegisterCard
@@ -119,7 +145,7 @@ export default async function AssetRegisterHubPage() {
           badge={`${zoneCount} records`}
           description="Actual protection zones and location coverage from the O&M Manual, including protection type, detection type, and actuation mode."
           href="/lab/fire-maintenance/protection-zones"
-          cta="Open Protection Zones →"
+          cta="Open Protection Zones"
         />
 
         <RegisterCard
@@ -127,9 +153,11 @@ export default async function AssetRegisterHubPage() {
           badge={`${deviceCount} records`}
           description="Actual device and tag records from the Equipment Tag Numbering Table such as detectors, MCP, bell, strobe, and I/O devices."
           href="/lab/fire-maintenance/device-register"
-          cta="Open Device Register →"
+          cta="Open Device Register"
         />
       </section>
+
+      <AssetRegisterClient assets={assets} />
 
       <section style={panelStyle}>
         <h2 style={{ marginTop: 0 }}>Recommended Use</h2>
@@ -178,17 +206,7 @@ function RegisterCard({ title, badge, description, href, cta }) {
 
 function InfoRow({ label, text }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "180px 1fr",
-        gap: 12,
-        padding: 12,
-        background: "#f8fafc",
-        borderRadius: 12,
-        border: "1px solid #e2e8f0",
-      }}
-    >
+    <div style={infoRowStyle}>
       <strong style={{ color: "#0f172a" }}>{label}</strong>
       <span style={{ color: "#475569" }}>{text}</span>
     </div>
@@ -197,7 +215,7 @@ function InfoRow({ label, text }) {
 
 const heroStyle = {
   display: "grid",
-  gridTemplateColumns: "1fr 360px",
+  gridTemplateColumns: "minmax(0, 1fr) 420px",
   gap: 20,
   alignItems: "center",
   marginBottom: 20,
@@ -222,14 +240,15 @@ const heroTextStyle = {
 };
 
 const projectCardStyle = {
-  background: "#0f172a",
+  background: "linear-gradient(135deg, #0f172a, #334155)",
   color: "white",
   padding: 20,
   borderRadius: 18,
+  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.18)",
 };
 
 const projectLabelStyle = {
-  color: "#fed7aa",
+  color: "#fb923c",
   fontWeight: 900,
   letterSpacing: 1.5,
   fontSize: 12,
@@ -295,11 +314,14 @@ const badgeStyle = {
 
 const buttonStyle = {
   display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   marginTop: 14,
+  height: 44,
   background: "#0369a1",
   color: "white",
-  padding: "10px 12px",
-  borderRadius: 12,
+  padding: "0 16px",
+  borderRadius: 8,
   textDecoration: "none",
   fontWeight: 900,
 };
@@ -311,4 +333,30 @@ const panelStyle = {
   padding: 18,
   marginBottom: 18,
   boxShadow: "0 10px 25px rgba(15, 23, 42, 0.06)",
+};
+
+const infoRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "180px 1fr",
+  gap: 12,
+  padding: 12,
+  background: "#f8fafc",
+  borderRadius: 12,
+  border: "1px solid #e2e8f0",
+};
+
+const backLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 40,
+  padding: "0 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "white",
+  color: "#0369a1",
+  fontWeight: 900,
+  fontSize: 14,
+  textDecoration: "none",
+  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
 };

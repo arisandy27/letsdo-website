@@ -1,15 +1,19 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import EquipmentAssetListClient from "./EquipmentAssetListClient";
 
 export const dynamic = "force-dynamic";
+
+const PROJECT_CODE = "FIRE-MEI-2026";
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) return null;
 
@@ -19,18 +23,6 @@ function getSupabaseClient() {
       autoRefreshToken: false,
     },
   });
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  const text = String(value);
-  if (text.length < 10) return text;
-  return `${text.slice(8, 10)}/${text.slice(5, 7)}/${text.slice(0, 4)}`;
-}
-
-function badgeClass(value) {
-  const key = String(value || "default").toLowerCase();
-  return `badge ${key}`;
 }
 
 async function saveAsset(formData) {
@@ -51,6 +43,7 @@ async function saveAsset(formData) {
 
   const payload = {
     project_id: projectId,
+    asset_level: "equipment",
     asset_code: formData.get("asset_code"),
     asset_name: formData.get("asset_name"),
     asset_type: formData.get("asset_type"),
@@ -77,6 +70,7 @@ async function saveAsset(formData) {
     }
 
     revalidatePath("/lab/fire-maintenance/assets");
+    revalidatePath("/lab/fire-maintenance/asset-register");
     revalidatePath("/lab/fire-maintenance");
     redirect("/lab/fire-maintenance/assets?updated=1");
   }
@@ -88,6 +82,7 @@ async function saveAsset(formData) {
   }
 
   revalidatePath("/lab/fire-maintenance/assets");
+  revalidatePath("/lab/fire-maintenance/asset-register");
   revalidatePath("/lab/fire-maintenance");
   redirect("/lab/fire-maintenance/assets?created=1");
 }
@@ -114,6 +109,7 @@ async function deleteAsset(formData) {
   }
 
   revalidatePath("/lab/fire-maintenance/assets");
+  revalidatePath("/lab/fire-maintenance/asset-register");
   revalidatePath("/lab/fire-maintenance");
   redirect("/lab/fire-maintenance/assets?deleted=1");
 }
@@ -128,26 +124,26 @@ async function loadPageData() {
     };
   }
 
-  const [projectRes, assetsRes] = await Promise.all([
-    supabase
-      .from("fire_projects")
-      .select("*")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("fire_assets")
-      .select("*, fire_projects(project_name, client_name, vendor_name, site_name)")
-      .order("asset_code", { ascending: true }),
-  ]);
+  const { data: project, error: projectError } = await supabase
+    .from("fire_projects")
+    .select("*")
+    .eq("project_code", PROJECT_CODE)
+    .maybeSingle();
 
-  const error = projectRes.error || assetsRes.error;
+  if (projectError) return { error: projectError.message };
+  if (!project) return { error: `Project not found: ${PROJECT_CODE}` };
 
-  if (error) return { error: error.message };
+  const { data: assets, error: assetsError } = await supabase
+    .from("fire_assets")
+    .select("*")
+    .eq("project_id", project.id)
+    .order("asset_code", { ascending: true });
+
+  if (assetsError) return { error: assetsError.message };
 
   return {
-    project: projectRes.data,
-    assets: assetsRes.data || [],
+    project,
+    assets: assets || [],
   };
 }
 
@@ -157,10 +153,9 @@ export default async function FireAssetRegisterPage({ searchParams }) {
 
   if (data.error) {
     return (
-      <main className="page">
-        <style>{css}</style>
-        <section className="error-box">
-          <h1>Asset Register</h1>
+      <main style={pageStyle}>
+        <section style={errorBoxStyle}>
+          <h1>Equipment Register</h1>
           <p>{data.error}</p>
         </section>
       </main>
@@ -169,86 +164,75 @@ export default async function FireAssetRegisterPage({ searchParams }) {
 
   const { project, assets } = data;
 
-  const editingAsset = assets.find((item) => item.id === params?.edit) || null;
+  const equipmentAssets = assets.filter(
+    (item) => !item.asset_level || item.asset_level === "equipment"
+  );
+
+  const editingAsset =
+    equipmentAssets.find((item) => item.id === params?.edit) || null;
 
   const created = params?.created;
   const updated = params?.updated;
   const deleted = params?.deleted;
   const error = params?.error;
 
-  const activeAssets = assets.filter((item) => item.status === "active");
-  const highCriticalAssets = assets.filter((item) =>
+  const showForm = params?.new === "1" || Boolean(editingAsset);
+  const activeAssets = equipmentAssets.filter((item) => item.status === "active");
+  const highCriticalAssets = equipmentAssets.filter((item) =>
     ["high", "critical"].includes(String(item.criticality).toLowerCase())
   );
 
   return (
-    <main className="page">
-      <style>{css}</style>
-
-      <section className="hero">
+    <main style={pageStyle}>
+      <section style={heroStyle}>
         <div>
-          <Link href="/lab/fire-maintenance" className="back-link">
-            ← Back to Fire Dashboard
-          </Link>
+          <Link href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</Link>
 
-          <div className="eyebrow">Fire Maintenance Pro</div>
-          <h1>Asset Register</h1>
-          <p>
-            Master list asset fire protection untuk maintenance schedule,
-            inspection, finding, evidence, dan report.
+          <div style={eyebrowStyle}>FIRE MAINTENANCE PRO</div>
+          <h1 style={heroTitleStyle}>Equipment Register</h1>
+          <p style={heroTextStyle}>
+            Master list maintainable fire protection equipment for maintenance schedule,
+            inspection, finding, evidence, and report.
           </p>
         </div>
 
-        <div className="project-box">
-          <div className="project-label">Project</div>
-          <div className="project-title">{project?.project_name || "-"}</div>
-          <div className="project-meta">{project?.site_name || "-"}</div>
-          <div className="project-meta">Client: {project?.client_name || "-"}</div>
-          <div className="project-meta">Vendor: {project?.vendor_name || "-"}</div>
+        <div style={projectBoxStyle}>
+          <div style={projectLabelStyle}>PROJECT</div>
+          <div style={projectTitleStyle}>{project?.project_name || "-"}</div>
+          <div style={projectMetaStyle}>{project?.site_name || "-"}</div>
+          <div style={projectMetaStyle}>Client: {project?.client_name || "-"}</div>
+          <div style={projectMetaStyle}>Vendor: {project?.vendor_name || "-"}</div>
         </div>
       </section>
 
-      {created && <div className="success-box">Asset baru berhasil ditambahkan.</div>}
-      {updated && <div className="success-box">Asset berhasil diupdate.</div>}
-      {deleted && <div className="success-box">Asset berhasil dihapus.</div>}
+      {created && <div style={successBoxStyle}>Asset baru berhasil ditambahkan.</div>}
+      {updated && <div style={successBoxStyle}>Asset berhasil diupdate.</div>}
+      {deleted && <div style={successBoxStyle}>Asset berhasil dihapus.</div>}
       {error && (
-        <div className="error-box">
-          Ada error pada asset register. Pastikan Asset Code belum pernah dipakai.
+        <div style={errorBoxStyle}>
+          Ada error pada equipment register. Pastikan Asset Code belum pernah dipakai.
         </div>
       )}
 
-      <section className="kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-label">Total Assets</div>
-          <div className="kpi-value">{assets.length}</div>
-          <div className="kpi-note">Registered assets</div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-label">Active Assets</div>
-          <div className="kpi-value">{activeAssets.length}</div>
-          <div className="kpi-note">Currently maintained</div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-label">High/Critical</div>
-          <div className="kpi-value">{highCriticalAssets.length}</div>
-          <div className="kpi-note">Priority assets</div>
-        </div>
+      <section style={kpiGridStyle}>
+        <KpiCard title="Total Equipment" value={equipmentAssets.length} caption="Maintainable assets" />
+        <KpiCard title="Active Equipment" value={activeAssets.length} caption="Currently maintained" />
+        <KpiCard title="High/Critical" value={highCriticalAssets.length} caption="Priority equipment" />
       </section>
 
-      <section className="two-col">
-        <form action={saveAsset} className="panel">
-          <div className="panel-head">
-            <h2>{editingAsset ? "Edit Asset" : "Add New Asset"}</h2>
-            <p>
+      <section style={layoutStyle}>
+        {showForm && (
+        <form action={saveAsset} style={panelStyle}>
+          <div style={panelHeadStyle}>
+            <h2 style={{ margin: 0 }}>{editingAsset ? "Edit Equipment" : "Add New Equipment"}</h2>
+            <p style={panelTextStyle}>
               {editingAsset
-                ? "Update data asset fire protection."
-                : "Tambahkan asset fire protection baru ke register."}
+                ? "Update equipment data."
+                : "Tambahkan equipment fire protection baru ke register."}
             </p>
 
             {editingAsset && (
-              <Link href="/lab/fire-maintenance/assets" className="cancel-link">
+              <Link href="/lab/fire-maintenance/assets" style={cancelLinkStyle}>
                 Cancel Edit
               </Link>
             )}
@@ -257,34 +241,34 @@ export default async function FireAssetRegisterPage({ searchParams }) {
           <input type="hidden" name="project_id" value={project?.id || ""} />
           <input type="hidden" name="asset_id" value={editingAsset?.id || ""} />
 
-          <label>
-            Asset Code
+          <Field label="Asset Code">
             <input
               type="text"
               name="asset_code"
               required
               defaultValue={editingAsset?.asset_code || ""}
               placeholder="Contoh: FMP-008"
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Asset Name
+          <Field label="Asset Name">
             <input
               type="text"
               name="asset_name"
               required
               defaultValue={editingAsset?.asset_name || ""}
               placeholder="Contoh: Fire Alarm Panel Area Boiler"
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Asset Type
+          <Field label="Asset Type">
             <select
               name="asset_type"
               required
               defaultValue={editingAsset?.asset_type || ""}
+              style={inputStyle}
             >
               <option value="">Select type</option>
               <option value="Fire Alarm System">Fire Alarm System</option>
@@ -298,488 +282,339 @@ export default async function FireAssetRegisterPage({ searchParams }) {
               <option value="Foam System">Foam System</option>
               <option value="Other">Other</option>
             </select>
-          </label>
+          </Field>
 
-          <label>
-            Area
+          <Field label="Area">
             <input
               type="text"
               name="area"
               defaultValue={editingAsset?.area || ""}
               placeholder="Contoh: Boiler Area"
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Location
+          <Field label="Location">
             <input
               type="text"
               name="location"
               defaultValue={editingAsset?.location || ""}
               placeholder="Contoh: Boiler Room"
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Manufacturer
+          <Field label="Manufacturer">
             <input
               type="text"
               name="manufacturer"
               defaultValue={editingAsset?.manufacturer || ""}
               placeholder="Contoh: Siemens"
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Model
+          <Field label="Model">
             <input
               type="text"
               name="model"
               defaultValue={editingAsset?.model || ""}
               placeholder="Contoh: FC724"
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Serial No
+          <Field label="Serial No">
             <input
               type="text"
               name="serial_no"
               defaultValue={editingAsset?.serial_no || ""}
               placeholder="Optional"
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Criticality
+          <Field label="Criticality">
             <select
               name="criticality"
               defaultValue={editingAsset?.criticality || "medium"}
+              style={inputStyle}
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
               <option value="critical">Critical</option>
             </select>
-          </label>
+          </Field>
 
-          <label>
-            Last Inspection Date
+          <Field label="Last Inspection Date">
             <input
               type="date"
               name="last_inspection_date"
               defaultValue={editingAsset?.last_inspection_date || ""}
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Next Inspection Date
+          <Field label="Next Inspection Date">
             <input
               type="date"
               name="next_inspection_date"
               defaultValue={editingAsset?.next_inspection_date || ""}
+              style={inputStyle}
             />
-          </label>
+          </Field>
 
-          <label>
-            Status
-            <select name="status" defaultValue={editingAsset?.status || "active"}>
+          <Field label="Status">
+            <select
+              name="status"
+              defaultValue={editingAsset?.status || "active"}
+              style={inputStyle}
+            >
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="archived">Archived</option>
             </select>
-          </label>
+          </Field>
 
-          <label>
-            Notes
+          <Field label="Notes">
             <textarea
               name="notes"
               rows="3"
               defaultValue={editingAsset?.notes || ""}
-              placeholder="Catatan asset, coverage area, atau remark lainnya..."
+              placeholder="Catatan equipment, coverage area, atau remark lainnya..."
+              style={{ ...inputStyle, height: "auto", paddingTop: 10 }}
             />
-          </label>
+          </Field>
 
-          <button type="submit">
-            {editingAsset ? "Update Asset" : "Add Asset"}
+          <button type="submit" style={primaryButtonStyle}>
+            {editingAsset ? "Update Equipment" : "Add Equipment"}
           </button>
         </form>
+        )}
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Fire Protection Asset List</h2>
-            <p>Asset register untuk project ini.</p>
-          </div>
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Action</th>
-                  <th>Asset Code</th>
-                  <th>Asset Name</th>
-                  <th>Type</th>
-                  <th>Area</th>
-                  <th>Location</th>
-                  <th>Manufacturer</th>
-                  <th>Criticality</th>
-                  <th>Status</th>
-                  <th>Last Inspection</th>
-                  <th>Next Inspection</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {assets.map((asset) => (
-                  <tr key={asset.id}>
-                    <td>
-                      <div className="actions">
-                        <Link
-                          href={`/lab/fire-maintenance/assets?edit=${asset.id}`}
-                          className="edit-link"
-                        >
-                          Edit
-                        </Link>
-
-                        <form action={deleteAsset}>
-                          <input type="hidden" name="asset_id" value={asset.id} />
-                          <button type="submit" className="delete-button">
-                            Delete
-                          </button>
-                        </form>
-                      </div>
-                    </td>
-
-                    <td>
-                      <strong>{asset.asset_code}</strong>
-                    </td>
-                    <td>{asset.asset_name}</td>
-                    <td>{asset.asset_type}</td>
-                    <td>{asset.area || "-"}</td>
-                    <td>{asset.location || "-"}</td>
-                    <td>{asset.manufacturer || "-"}</td>
-                    <td>
-                      <span className={badgeClass(asset.criticality)}>
-                        {asset.criticality}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={badgeClass(asset.status)}>{asset.status}</span>
-                    </td>
-                    <td>{formatDate(asset.last_inspection_date)}</td>
-                    <td>{formatDate(asset.next_inspection_date)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <EquipmentAssetListClient
+          assets={equipmentAssets}
+          deleteAction={deleteAsset}
+        />
       </section>
     </main>
   );
 }
 
-const css = `
-  .page {
-    min-height: 100vh;
-    background: #f8fafc;
-    color: #0f172a;
-    padding: 24px;
-    font-family: Arial, sans-serif;
-  }
+function KpiCard({ title, value, caption }) {
+  return (
+    <div style={kpiCardStyle}>
+      <div style={kpiTitleStyle}>{title}</div>
+      <div style={kpiValueStyle}>{value}</div>
+      <div style={kpiCaptionStyle}>{caption}</div>
+    </div>
+  );
+}
 
-  .hero {
-    display: grid;
-    grid-template-columns: 1fr 360px;
-    gap: 20px;
-    margin-bottom: 18px;
-  }
+function Field({ label, children }) {
+  return (
+    <label style={fieldStyle}>
+      <span style={labelStyle}>{label}</span>
+      {children}
+    </label>
+  );
+}
 
-  .back-link,
-  .cancel-link {
-    display: inline-flex;
-    margin-bottom: 16px;
-    color: #ea580c;
-    text-decoration: none;
-    font-weight: 900;
-  }
+const pageStyle = {
+  padding: 24,
+  maxWidth: 1500,
+  margin: "0 auto",
+};
 
-  .cancel-link {
-    margin-top: 10px;
-    margin-bottom: 0;
-  }
+const heroStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) 360px",
+  gap: 20,
+  alignItems: "center",
+  marginBottom: 20,
+};
 
-  .eyebrow {
-    color: #ea580c;
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: .4px;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
+const backLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 40,
+  padding: "0 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "white",
+  color: "#0369a1",
+  fontWeight: 900,
+  fontSize: 14,
+  textDecoration: "none",
+  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
+};
 
-  h1 {
-    margin: 0 0 10px;
-    font-size: 34px;
-    letter-spacing: -1px;
-  }
+const eyebrowStyle = {
+  color: "#ea580c",
+  fontWeight: 900,
+  letterSpacing: 1.5,
+  fontSize: 13,
+  marginTop: 18,
+  textTransform: "uppercase",
+};
 
-  h2 {
-    margin: 0;
-    font-size: 18px;
-  }
+const heroTitleStyle = {
+  fontSize: 34,
+  margin: "10px 0",
+  color: "#0f172a",
+};
 
-  p {
-    color: #64748b;
-    line-height: 1.55;
-    margin: 0;
-  }
+const heroTextStyle = {
+  color: "#64748b",
+  maxWidth: 820,
+  margin: 0,
+};
 
-  .project-box {
-    background: #0f172a;
-    color: white;
-    border-radius: 18px;
-    padding: 20px;
-    box-shadow: 0 14px 30px rgba(15,23,42,.16);
-  }
+const projectBoxStyle = {
+  background: "#0f172a",
+  color: "white",
+  padding: 20,
+  borderRadius: 18,
+  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.18)",
+};
 
-  .project-label {
-    color: #fed7aa;
-    font-size: 12px;
-    font-weight: 900;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
+const projectLabelStyle = {
+  color: "#fed7aa",
+  fontWeight: 900,
+  letterSpacing: 1.5,
+  fontSize: 12,
+  textTransform: "uppercase",
+};
 
-  .project-title {
-    font-size: 20px;
-    font-weight: 900;
-    margin-bottom: 10px;
-  }
+const projectTitleStyle = {
+  fontSize: 22,
+  fontWeight: 950,
+  marginTop: 10,
+};
 
-  .project-meta {
-    color: #cbd5e1;
-    font-size: 13px;
-    line-height: 1.6;
-  }
+const projectMetaStyle = {
+  color: "#cbd5e1",
+  marginTop: 6,
+  fontSize: 14,
+};
 
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-    margin-bottom: 14px;
-  }
+const successBoxStyle = {
+  background: "#dcfce7",
+  border: "1px solid #86efac",
+  color: "#166534",
+  padding: 12,
+  borderRadius: 14,
+  marginBottom: 14,
+  fontWeight: 800,
+};
 
-  .two-col {
-    display: grid;
-    grid-template-columns: 420px 1fr;
-    gap: 14px;
-  }
+const errorBoxStyle = {
+  background: "#fee2e2",
+  border: "1px solid #fecaca",
+  color: "#991b1b",
+  padding: 12,
+  borderRadius: 14,
+  marginBottom: 14,
+  fontWeight: 800,
+};
 
-  .kpi-card,
-  .panel {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 18px;
-    padding: 18px;
-    box-shadow: 0 8px 20px rgba(15,23,42,.04);
-  }
+const kpiGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 14,
+  marginBottom: 18,
+};
 
-  .kpi-label {
-    color: #64748b;
-    font-size: 13px;
-    font-weight: 900;
-  }
+const kpiCardStyle = {
+  background: "white",
+  border: "1px solid #e2e8f0",
+  borderRadius: 16,
+  padding: 18,
+  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.06)",
+};
 
-  .kpi-value {
-    font-size: 34px;
-    font-weight: 950;
-    margin-top: 8px;
-  }
+const kpiTitleStyle = {
+  color: "#64748b",
+  fontWeight: 900,
+  fontSize: 13,
+};
 
-  .kpi-note {
-    color: #64748b;
-    font-size: 13px;
-  }
+const kpiValueStyle = {
+  color: "#0f172a",
+  fontWeight: 950,
+  fontSize: 34,
+  marginTop: 8,
+};
 
-  .panel-head {
-    margin-bottom: 14px;
-  }
+const kpiCaptionStyle = {
+  color: "#64748b",
+  fontSize: 13,
+};
 
-  label {
-    display: grid;
-    gap: 6px;
-    margin-bottom: 12px;
-    color: #334155;
-    font-size: 13px;
-    font-weight: 900;
-  }
+const layoutStyle = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 18,
+  alignItems: "start",
+};
 
-  input,
-  select,
-  textarea {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
-    padding: 10px 12px;
-    font-size: 14px;
-    color: #0f172a;
-    background: white;
-  }
+const panelStyle = {
+  background: "white",
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+  padding: 18,
+  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.06)",
+};
 
-  textarea {
-    resize: vertical;
-  }
+const panelHeadStyle = {
+  marginBottom: 14,
+};
 
-  button {
-    border: none;
-    background: #ea580c;
-    color: white;
-    font-weight: 900;
-    border-radius: 12px;
-    padding: 11px 14px;
-    cursor: pointer;
-    box-shadow: 0 8px 18px rgba(234,88,12,.22);
-  }
+const panelTextStyle = {
+  color: "#64748b",
+  margin: "6px 0 0",
+};
 
-  button:hover {
-    background: #c2410c;
-  }
+const cancelLinkStyle = {
+  display: "inline-flex",
+  marginTop: 10,
+  color: "#0369a1",
+  fontWeight: 900,
+  textDecoration: "none",
+};
 
-  .table-wrap {
-    overflow-x: auto;
-  }
+const fieldStyle = {
+  display: "grid",
+  gap: 6,
+  marginBottom: 12,
+};
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
+const labelStyle = {
+  color: "#334155",
+  fontWeight: 900,
+  fontSize: 13,
+};
 
-  th {
-    text-align: left;
-    color: #64748b;
-    border-bottom: 1px solid #e2e8f0;
-    padding: 10px 8px;
-    font-size: 12px;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
+const inputStyle = {
+  width: "100%",
+  height: 44,
+  padding: "0 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  fontSize: 14,
+  boxSizing: "border-box",
+  background: "white",
+};
 
-  td {
-    border-bottom: 1px solid #f1f5f9;
-    padding: 12px 8px;
-    vertical-align: top;
-    white-space: nowrap;
-  }
-
-  .actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .edit-link {
-    display: inline-flex;
-    padding: 6px 10px;
-    border-radius: 999px;
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: 1px solid #bfdbfe;
-    text-decoration: none;
-    font-size: 12px;
-    font-weight: 900;
-  }
-
-  .delete-button {
-    padding: 6px 10px;
-    border-radius: 999px;
-    background: #fef2f2;
-    color: #b91c1c;
-    border: 1px solid #fecaca;
-    box-shadow: none;
-    font-size: 12px;
-  }
-
-  .delete-button:hover {
-    background: #fee2e2;
-  }
-
-  .badge {
-    display: inline-flex;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #334155;
-    text-transform: capitalize;
-  }
-
-  .badge.active {
-    background: #ecfdf5;
-    color: #047857;
-    border-color: #a7f3d0;
-  }
-
-  .badge.inactive,
-  .badge.archived {
-    background: #f1f5f9;
-    color: #475569;
-    border-color: #cbd5e1;
-  }
-
-  .badge.high {
-    background: #fff7ed;
-    color: #c2410c;
-    border-color: #fed7aa;
-  }
-
-  .badge.medium {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #bfdbfe;
-  }
-
-  .badge.low {
-    background: #f1f5f9;
-    color: #475569;
-    border-color: #cbd5e1;
-  }
-
-  .badge.critical {
-    background: #fef2f2;
-    color: #b91c1c;
-    border-color: #fecaca;
-  }
-
-  .success-box {
-    background: #ecfdf5;
-    color: #047857;
-    border: 1px solid #a7f3d0;
-    border-radius: 14px;
-    padding: 12px;
-    margin-bottom: 14px;
-    font-weight: 900;
-  }
-
-  .error-box {
-    background: white;
-    border: 1px solid #fecaca;
-    color: #b91c1c;
-    border-radius: 18px;
-    padding: 20px;
-    margin-bottom: 14px;
-  }
-
-  @media (max-width: 1000px) {
-    .hero,
-    .two-col,
-    .kpi-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-`;
-
+const primaryButtonStyle = {
+  width: "100%",
+  height: 44,
+  border: "1px solid #ea580c",
+  background: "#ea580c",
+  color: "white",
+  borderRadius: 8,
+  fontWeight: 900,
+  cursor: "pointer",
+};

@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -185,9 +185,7 @@ export default async function FireFindingsPage({ searchParams }) {
 
       <section className="hero">
         <div>
-          <Link href="/lab/fire-maintenance" className="back-link">
-            ← Back to Fire Dashboard
-          </Link>
+          <Link href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</Link>
 
           <div className="eyebrow">Fire Maintenance Pro</div>
           <h1>Findings / Action Tracker</h1>
@@ -674,3 +672,19 @@ const css = `
     }
   }
 `;
+
+const backLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 40,
+  padding: "0 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "white",
+  color: "#0369a1",
+  fontWeight: 900,
+  fontSize: 14,
+  textDecoration: "none",
+  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
+};

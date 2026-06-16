@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -142,9 +142,7 @@ export default async function AssetVerificationPage({ searchParams }) {
   return (
     <main style={{ padding: 24, maxWidth: 1500, margin: "0 auto" }}>
       <p>
-        <a href="/lab/fire-maintenance" style={{ color: "#0369a1", fontWeight: 800 }}>
-          ← Back to Fire Maintenance Dashboard
-        </a>
+        <a href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</a>
       </p>
 
       <section style={heroStyle}>
@@ -453,4 +451,20 @@ const errorAlertStyle = {
   borderRadius: 12,
   marginBottom: 14,
   fontWeight: 800,
+};
+
+const backLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 40,
+  padding: "0 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "white",
+  color: "#0369a1",
+  fontWeight: 900,
+  fontSize: 14,
+  textDecoration: "none",
+  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
 };
