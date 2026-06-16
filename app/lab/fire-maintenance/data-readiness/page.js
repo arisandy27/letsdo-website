@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import DataReadinessClient from "./DataReadinessClient";
 
 export const dynamic = "force-dynamic";
 
@@ -213,25 +214,7 @@ export default async function DataReadinessPage() {
         </div>
       </section>
 
-      <section style={panelStyle}>
-        <h2 style={{ marginTop: 0 }}>Readiness Checklist</h2>
-
-        <div style={{ display: "grid", gap: 12 }}>
-          {readinessItems.map((item) => (
-            <div key={item.label} style={checkRowStyle}>
-              <div>
-                <strong style={{ color: "#0f172a" }}>{item.label}</strong>
-                <div style={{ color: "#64748b", marginTop: 4 }}>{item.note}</div>
-              </div>
-
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontWeight: 950, color: "#0f172a" }}>{item.value}</div>
-                <StatusBadge status={item.status} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            <DataReadinessClient readinessItems={readinessItems} />
     </main>
   );
 }
