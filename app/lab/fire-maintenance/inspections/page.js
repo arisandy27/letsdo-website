@@ -2,14 +2,18 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import InspectionListClient from "./InspectionListClient";
 
 export const dynamic = "force-dynamic";
+
+const PROJECT_CODE = "FIRE-MEI-2026";
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) return null;
 
@@ -25,10 +29,10 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function monthStartIso() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-01`;
+function monthStartFromDate(value) {
+  const text = String(value || todayIso());
+  if (text.length < 7) return todayIso().slice(0, 7) + "-01";
+  return `${text.slice(0, 7)}-01`;
 }
 
 function formatDate(value) {
@@ -36,11 +40,6 @@ function formatDate(value) {
   const text = String(value);
   if (text.length < 10) return text;
   return `${text.slice(8, 10)}/${text.slice(5, 7)}/${text.slice(0, 4)}`;
-}
-
-function badgeClass(value) {
-  const key = String(value || "default").toLowerCase().replaceAll("_", "-");
-  return `badge ${key}`;
 }
 
 async function createInspection(formData) {
@@ -56,6 +55,10 @@ async function createInspection(formData) {
   const assetId = formData.get("asset_id");
   const scheduleId = formData.get("schedule_id");
   const inspectionDate = formData.get("inspection_date") || todayIso();
+
+  if (!projectId) {
+    redirect("/lab/fire-maintenance/inspections?error=project");
+  }
 
   const checklist = {
     visual_condition: formData.get("visual_condition") === "on",
@@ -75,7 +78,7 @@ async function createInspection(formData) {
     overall_condition: formData.get("overall_condition") || "good",
     checklist,
     summary: formData.get("summary") || null,
-    report_month: monthStartIso(),
+    report_month: monthStartFromDate(inspectionDate),
     status: "submitted",
   });
 
@@ -117,6 +120,7 @@ async function createInspection(formData) {
   revalidatePath("/lab/fire-maintenance/inspections");
   revalidatePath("/lab/fire-maintenance/schedules");
   revalidatePath("/lab/fire-maintenance/assets");
+  revalidatePath("/lab/fire-maintenance/data-readiness");
   revalidatePath("/lab/fire-maintenance/timeline");
   revalidatePath("/lab/fire-maintenance/reports");
   revalidatePath("/lab/fire-maintenance");
@@ -133,38 +137,41 @@ async function loadPageData() {
     };
   }
 
-  const [projectRes, assetsRes, schedulesRes, inspectionsRes] = await Promise.all([
-    supabase
-      .from("fire_projects")
-      .select("*")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
+  const { data: project, error: projectError } = await supabase
+    .from("fire_projects")
+    .select("*")
+    .eq("project_code", PROJECT_CODE)
+    .maybeSingle();
+
+  if (projectError) return { error: projectError.message };
+  if (!project) return { error: `Project not found: ${PROJECT_CODE}` };
+
+  const [assetsRes, schedulesRes, inspectionsRes] = await Promise.all([
     supabase
       .from("fire_assets")
       .select("*")
+      .eq("project_id", project.id)
       .order("asset_code", { ascending: true }),
+
     supabase
       .from("fire_maintenance_schedules")
-      .select("*, fire_assets(asset_code, asset_name)")
+      .select("*, fire_assets(asset_code, asset_name), fire_scope_templates(frequency, system_group, scope_title)")
+      .eq("project_id", project.id)
       .order("planned_date", { ascending: true }),
+
     supabase
       .from("fire_inspections")
       .select("*, fire_assets(asset_code, asset_name), fire_maintenance_schedules(schedule_code)")
-      .order("inspection_date", { ascending: false })
-      .limit(10),
+      .eq("project_id", project.id)
+      .order("inspection_date", { ascending: false }),
   ]);
 
-  const error =
-    projectRes.error ||
-    assetsRes.error ||
-    schedulesRes.error ||
-    inspectionsRes.error;
+  const error = assetsRes.error || schedulesRes.error || inspectionsRes.error;
 
   if (error) return { error: error.message };
 
   return {
-    project: projectRes.data,
+    project,
     assets: assetsRes.data || [],
     schedules: schedulesRes.data || [],
     inspections: inspectionsRes.data || [],
@@ -172,6 +179,7 @@ async function loadPageData() {
 }
 
 export default async function FireInspectionPage({ searchParams }) {
+  const params = await searchParams;
   const data = await loadPageData();
 
   if (data.error) {
@@ -187,8 +195,14 @@ export default async function FireInspectionPage({ searchParams }) {
   }
 
   const { project, assets, schedules, inspections } = data;
-  const created = searchParams?.created;
-  const error = searchParams?.error;
+
+  const created = params?.created;
+  const error = params?.error;
+  const showForm = params?.new === "1";
+
+  const goodCount = inspections.filter((item) => item.overall_condition === "good").length;
+  const watchCount = inspections.filter((item) => item.overall_condition === "watch").length;
+  const failCount = inspections.filter((item) => item.overall_condition === "fail").length;
 
   return (
     <main className="page">
@@ -196,7 +210,9 @@ export default async function FireInspectionPage({ searchParams }) {
 
       <section className="hero">
         <div>
-          <Link href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</Link>
+          <Link href="/lab/fire-maintenance" style={backLinkStyle}>
+            Back to Fire Maintenance Dashboard
+          </Link>
 
           <div className="eyebrow">Fire Maintenance Pro</div>
           <h1>Inspection Form</h1>
@@ -218,169 +234,181 @@ export default async function FireInspectionPage({ searchParams }) {
       {created && <div className="success-box">Inspection record berhasil disimpan.</div>}
       {error && <div className="error-box">Ada error saat menyimpan inspection record.</div>}
 
-      <section className="two-col">
-        <form action={createInspection} className="panel">
+      <section className="kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-label">Total Inspection</div>
+          <div className="kpi-value">{inspections.length}</div>
+          <div className="kpi-note">Submitted records</div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Good</div>
+          <div className="kpi-value">{goodCount}</div>
+          <div className="kpi-note">Normal condition</div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Watch</div>
+          <div className="kpi-value">{watchCount}</div>
+          <div className="kpi-note">Needs monitoring</div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Fail</div>
+          <div className="kpi-value">{failCount}</div>
+          <div className="kpi-note">Needs action</div>
+        </div>
+      </section>
+
+      {showForm && (
+        <form action={createInspection} className="panel form-panel">
           <div className="panel-head">
             <h2>New Inspection Record</h2>
             <p>Input hasil inspeksi asset fire protection.</p>
+
+            <Link href="/lab/fire-maintenance/inspections" className="cancel-link">
+              Cancel
+            </Link>
           </div>
 
           <input type="hidden" name="project_id" value={project?.id || ""} />
 
-          <label>
-            Inspection Date
-            <input type="date" name="inspection_date" defaultValue={todayIso()} />
-          </label>
+          <div className="form-grid">
+            <label>
+              Inspection Date
+              <input type="date" name="inspection_date" defaultValue={todayIso()} />
+            </label>
 
-          <label>
-            Inspector Name
-            <input
-              type="text"
-              name="inspector_name"
-              defaultValue="Fire Kelas A Support"
-              placeholder="Inspector name"
-            />
-          </label>
+            <label>
+              Inspector Name
+              <input
+                type="text"
+                name="inspector_name"
+                defaultValue="Fire Kelas A Support"
+                placeholder="Inspector name"
+              />
+            </label>
 
-          <label>
-            Asset
-            <select name="asset_id" required>
-              <option value="">Select asset</option>
-              {assets.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.asset_code} - {asset.asset_name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Related Schedule
-            <select name="schedule_id">
-              <option value="">No related schedule</option>
-              {schedules.map((schedule) => {
-                const scopeTitle =
-                  schedule.fire_scope_templates?.scope_title ||
-                  schedule.activity_type ||
-                  "Schedule";
-
-                const systemGroup =
-                  schedule.fire_scope_templates?.system_group ||
-                  schedule.fire_assets?.asset_code ||
-                  "General";
-
-                const frequency =
-                  schedule.fire_scope_templates?.frequency ||
-                  schedule.frequency ||
-                  "-";
-
-                return (
-                  <option key={schedule.id} value={schedule.id}>
-                    {formatDate(schedule.planned_date)} | {frequency} | {systemGroup} | {scopeTitle} ({schedule.schedule_code})
+            <label className="wide">
+              Asset
+              <select name="asset_id" required>
+                <option value="">Select asset</option>
+                {assets.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.asset_code} - {asset.asset_name}
                   </option>
-                );
-              })}
-            </select>
-          </label>
-
-          <label>
-            Overall Condition
-            <select name="overall_condition">
-              <option value="good">Good</option>
-              <option value="watch">Watch</option>
-              <option value="fail">Fail</option>
-            </select>
-          </label>
-
-          <div className="checklist">
-            <div className="check-title">Checklist</div>
-
-            <label className="check">
-              <input type="checkbox" name="visual_condition" defaultChecked />
-              Visual condition OK
+                ))}
+              </select>
             </label>
 
-            <label className="check">
-              <input type="checkbox" name="access_clear" defaultChecked />
-              Access clear
+            <label className="wide">
+              Related Schedule
+              <select name="schedule_id">
+                <option value="">No related schedule</option>
+                {schedules.map((schedule) => {
+                  const scopeTitle =
+                    schedule.fire_scope_templates?.scope_title ||
+                    schedule.activity_type ||
+                    "Schedule";
+
+                  const systemGroup =
+                    schedule.fire_scope_templates?.system_group ||
+                    schedule.fire_assets?.asset_code ||
+                    "General";
+
+                  const frequency =
+                    schedule.fire_scope_templates?.frequency ||
+                    schedule.frequency ||
+                    "-";
+
+                  return (
+                    <option key={schedule.id} value={schedule.id}>
+                      {formatDate(schedule.planned_date)} | {frequency} | {systemGroup} | {scopeTitle} ({schedule.schedule_code})
+                    </option>
+                  );
+                })}
+              </select>
             </label>
 
-            <label className="check">
-              <input type="checkbox" name="signage_ok" defaultChecked />
-              Signage / label OK
+            <label>
+              Overall Condition
+              <select name="overall_condition">
+                <option value="good">Good</option>
+                <option value="watch">Watch</option>
+                <option value="fail">Fail</option>
+              </select>
             </label>
 
-            <label className="check">
-              <input type="checkbox" name="panel_normal" />
-              Panel / indicator normal
-            </label>
+            <div className="checklist wide">
+              <div className="check-title">Checklist</div>
 
-            <label className="check">
-              <input type="checkbox" name="pressure_ok" />
-              Pressure / gauge OK
-            </label>
+              <label className="check">
+                <input type="checkbox" name="visual_condition" defaultChecked />
+                Visual condition OK
+              </label>
 
-            <label className="check">
-              <input type="checkbox" name="no_leak_damage" defaultChecked />
-              No leak / physical damage
+              <label className="check">
+                <input type="checkbox" name="access_clear" defaultChecked />
+                Access clear
+              </label>
+
+              <label className="check">
+                <input type="checkbox" name="signage_ok" defaultChecked />
+                Signage / label OK
+              </label>
+
+              <label className="check">
+                <input type="checkbox" name="panel_normal" />
+                Panel / indicator normal
+              </label>
+
+              <label className="check">
+                <input type="checkbox" name="pressure_ok" />
+                Pressure / gauge OK
+              </label>
+
+              <label className="check">
+                <input type="checkbox" name="no_leak_damage" defaultChecked />
+                No leak / physical damage
+              </label>
+            </div>
+
+            <label className="wide">
+              Summary / Notes
+              <textarea
+                name="summary"
+                rows="4"
+                placeholder="Contoh: panel normal, area clear, signage perlu improvement..."
+              />
             </label>
           </div>
 
-          <label>
-            Summary / Notes
-            <textarea
-              name="summary"
-              rows="4"
-              placeholder="Contoh: panel normal, area clear, signage perlu improvement..."
-            />
-          </label>
-
-          <button type="submit">Save Inspection</button>
+          <button type="submit" className="submit-button">
+            Save Inspection
+          </button>
         </form>
+      )}
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Recent Inspections</h2>
-            <p>Record inspeksi terakhir yang sudah tersimpan.</p>
-          </div>
-
-          <div className="inspection-list">
-            {inspections.map((item) => (
-              <div className="inspection-card" key={item.id}>
-                <div className="inspection-top">
-                  <strong>{formatDate(item.inspection_date)}</strong>
-                  <span className={badgeClass(item.overall_condition)}>
-                    {item.overall_condition}
-                  </span>
-                </div>
-
-                <div className="inspection-title">
-                  {item.fire_assets?.asset_code || "-"} - {item.fire_assets?.asset_name || "-"}
-                </div>
-
-                <div className="inspection-meta">
-                  Inspector: {item.inspector_name || "-"}
-                </div>
-
-                <div className="inspection-meta">
-                  Schedule: {item.fire_maintenance_schedules?.schedule_code || "-"}
-                </div>
-
-                <div className="inspection-summary">{item.summary || "-"}</div>
-
-                <span className={badgeClass(item.status)}>{item.status}</span>
-              </div>
-            ))}
-
-            {inspections.length === 0 && (
-              <div className="empty-box">Belum ada inspection record.</div>
-            )}
-          </div>
-        </section>
-      </section>
+      <InspectionListClient inspections={inspections} />
     </main>
   );
 }
+
+const backLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 40,
+  padding: "0 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "white",
+  color: "#0369a1",
+  fontWeight: 900,
+  fontSize: 14,
+  textDecoration: "none",
+  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
+};
 
 const css = `
   .page {
@@ -393,17 +421,9 @@ const css = `
 
   .hero {
     display: grid;
-    grid-template-columns: 1fr 360px;
+    grid-template-columns: minmax(0, 1fr) 360px;
     gap: 20px;
     margin-bottom: 18px;
-  }
-
-  .back-link {
-    display: inline-flex;
-    margin-bottom: 16px;
-    color: #ea580c;
-    text-decoration: none;
-    font-weight: 900;
   }
 
   .eyebrow {
@@ -412,7 +432,7 @@ const css = `
     font-weight: 900;
     letter-spacing: .4px;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin: 16px 0 8px;
   }
 
   h1 {
@@ -460,12 +480,14 @@ const css = `
     line-height: 1.6;
   }
 
-  .two-col {
+  .kpi-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
+    margin-bottom: 14px;
   }
 
+  .kpi-card,
   .panel {
     background: white;
     border: 1px solid #e2e8f0;
@@ -474,14 +496,52 @@ const css = `
     box-shadow: 0 8px 20px rgba(15,23,42,.04);
   }
 
+  .form-panel {
+    margin-bottom: 14px;
+  }
+
+  .kpi-label {
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .kpi-value {
+    font-size: 34px;
+    font-weight: 950;
+    margin-top: 8px;
+  }
+
+  .kpi-note {
+    color: #64748b;
+    font-size: 13px;
+  }
+
   .panel-head {
     margin-bottom: 14px;
+  }
+
+  .cancel-link {
+    display: inline-flex;
+    margin-top: 10px;
+    color: #0369a1;
+    text-decoration: none;
+    font-weight: 900;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .wide {
+    grid-column: 1 / -1;
   }
 
   label {
     display: grid;
     gap: 6px;
-    margin-bottom: 12px;
     color: #334155;
     font-size: 13px;
     font-weight: 900;
@@ -493,7 +553,7 @@ const css = `
     width: 100%;
     box-sizing: border-box;
     border: 1px solid #cbd5e1;
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 10px 12px;
     font-size: 14px;
     color: #0f172a;
@@ -504,19 +564,16 @@ const css = `
     resize: vertical;
   }
 
-  button {
+  .submit-button {
+    margin-top: 14px;
     border: none;
     background: #ea580c;
     color: white;
     font-weight: 900;
-    border-radius: 12px;
-    padding: 11px 14px;
+    border-radius: 8px;
+    padding: 11px 16px;
     cursor: pointer;
     box-shadow: 0 8px 18px rgba(234,88,12,.22);
-  }
-
-  button:hover {
-    background: #c2410c;
   }
 
   .checklist {
@@ -524,7 +581,6 @@ const css = `
     background: #f8fafc;
     border-radius: 14px;
     padding: 12px;
-    margin-bottom: 12px;
   }
 
   .check-title {
@@ -542,70 +598,6 @@ const css = `
 
   .check input {
     width: auto;
-  }
-
-  .inspection-list {
-    display: grid;
-    gap: 10px;
-  }
-
-  .inspection-card {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 12px;
-  }
-
-  .inspection-top {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-
-  .inspection-title {
-    font-weight: 900;
-    margin-bottom: 6px;
-  }
-
-  .inspection-meta,
-  .inspection-summary {
-    color: #64748b;
-    font-size: 12px;
-    line-height: 1.5;
-    margin-bottom: 6px;
-  }
-
-  .badge {
-    display: inline-flex;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #334155;
-    text-transform: capitalize;
-    white-space: nowrap;
-  }
-
-  .badge.good,
-  .badge.submitted {
-    background: #ecfdf5;
-    color: #047857;
-    border-color: #a7f3d0;
-  }
-
-  .badge.watch {
-    background: #fff7ed;
-    color: #c2410c;
-    border-color: #fed7aa;
-  }
-
-  .badge.fail {
-    background: #fef2f2;
-    color: #b91c1c;
-    border-color: #fecaca;
   }
 
   .success-box {
@@ -627,34 +619,10 @@ const css = `
     margin-bottom: 14px;
   }
 
-  .empty-box {
-    color: #64748b;
-    padding: 18px;
-    text-align: center;
-    border: 1px dashed #cbd5e1;
-    border-radius: 14px;
-  }
-
   @media (max-width: 900px) {
     .hero,
-    .two-col {
+    .form-grid {
       grid-template-columns: 1fr;
     }
   }
 `;
-
-const backLinkStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  height: 40,
-  padding: "0 14px",
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-  background: "white",
-  color: "#0369a1",
-  fontWeight: 900,
-  fontSize: 14,
-  textDecoration: "none",
-  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
-};
