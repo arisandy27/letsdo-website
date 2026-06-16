@@ -309,11 +309,11 @@ export default async function FireMonthlyReportPage({ searchParams }) {
       {showForm && (
         <form action={saveMonthlyReport} className="panel form-panel">
           <div className="panel-head">
-            <h2>{editingReport ? "Edit Monthly Report" : "Create Monthly Report"}</h2>
+            <h2>{editingReport ? "Edit Report Composer" : "Create Report Composer"}</h2>
             <p>
               {editingReport
-                ? "Update draft laporan bulanan."
-                : "Generate draft laporan bulanan berdasarkan kondisi terakhir."}
+                ? "Update report header, executive summary, and publishing status."
+                : "Prepare report header and executive summary. Detailed sections are generated automatically from module data."}
             </p>
 
             <Link href="/lab/fire-maintenance/reports" className="cancel-link">
@@ -323,6 +323,64 @@ export default async function FireMonthlyReportPage({ searchParams }) {
 
           <input type="hidden" name="project_id" value={project?.id || ""} />
           <input type="hidden" name="report_id" value={editingReport?.id || ""} />
+          <div className="composer-guide">
+            <div className="composer-guide-head">
+              <strong>Monthly Report Structure</strong>
+              <span>Print report output follows this structure</span>
+            </div>
+
+            <div className="composer-grid">
+              <div className="composer-item">
+                <span>1. Report Header</span>
+                <b className="composer-badge editable">Editable</b>
+              </div>
+
+              <div className="composer-item">
+                <span>2. Executive Summary</span>
+                <b className="composer-badge editable">Editable</b>
+              </div>
+
+              <div className="composer-item">
+                <span>3. Scope Coverage</span>
+                <b className="composer-badge auto">Auto</b>
+              </div>
+
+              <div className="composer-item">
+                <span>4. Schedule Status</span>
+                <b className="composer-badge auto">Auto</b>
+              </div>
+
+              <div className="composer-item">
+                <span>5. Inspection Summary</span>
+                <b className="composer-badge auto">Auto</b>
+              </div>
+
+              <div className="composer-item">
+                <span>6. Findings & Action</span>
+                <b className="composer-badge auto">Auto</b>
+              </div>
+
+              <div className="composer-item">
+                <span>7. Training Record</span>
+                <b className="composer-badge auto">Auto</b>
+              </div>
+
+              <div className="composer-item">
+                <span>8. Evidence / Attachments</span>
+                <b className="composer-badge auto">Auto</b>
+              </div>
+
+              <div className="composer-item">
+                <span>9. Report Analysis</span>
+                <b className="composer-badge auto">Auto</b>
+              </div>
+
+              <div className="composer-item">
+                <span>10. Recommendation & Sign-off</span>
+                <b className="composer-badge auto">Auto</b>
+              </div>
+            </div>
+          </div>
 
           <div className="form-grid">
             <label>
@@ -361,12 +419,15 @@ export default async function FireMonthlyReportPage({ searchParams }) {
             </label>
 
             <label className="wide">
-              Monthly Summary
+              Executive Summary / Monthly Summary
               <textarea
                 name="summary"
                 rows="6"
                 defaultValue={editingReport?.summary || generatedSummary}
               />
+              <div className="field-hint">
+                This text appears in the Executive Summary. Scope, schedule, inspection, findings, training, evidence, and analysis sections are generated automatically.
+              </div>
             </label>
           </div>
 

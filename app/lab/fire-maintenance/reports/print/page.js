@@ -262,14 +262,47 @@ export default async function FirePrintableReportPage({ searchParams }) {
     includeEvidenceInReport(item, type)
   );
 
+  const completedSchedules = schedules.filter((item) => item.status === "done");
+  const reportAnalysis = {
+    scheduleCompletion:
+      schedules.length > 0
+        ? Math.round((completedSchedules.length / schedules.length) * 1000) / 10
+        : 0,
+    overdueSchedules: schedules.filter((item) => item.status === "overdue").length,
+    plannedSchedules: schedules.filter((item) => item.status === "planned").length,
+    failedInspections: inspections.filter((item) => item.overall_condition === "fail").length,
+    watchInspections: inspections.filter((item) => item.overall_condition === "watch").length,
+    photoEvidence: reportAttachments.filter((item) => item.evidence_type === "photo").length,
+    testEvidence: reportAttachments.filter((item) => item.evidence_type === "test_result").length,
+    reportEvidence: reportAttachments.filter(
+      (item) => item.evidence_type === "signed_report" || item.reference_type === "report"
+    ).length,
+    totalParticipants: trainings.reduce(
+      (sum, item) => sum + Number(item.participants_count || 0),
+      0
+    ),
+  };
+
+  const managementStatus =
+    highCriticalFindings.length > 0 || reportAnalysis.overdueSchedules > 0
+      ? "Priority Attention"
+      : openFindings.length > 0
+        ? "Controlled with Open Action"
+        : "Controlled";
+
+  const managementInsight =
+    managementStatus === "Priority Attention"
+      ? "This report requires management follow-up because overdue schedule or high/critical finding exists."
+      : managementStatus === "Controlled with Open Action"
+        ? "The maintenance program is running, but open findings still require tracking until closure."
+        : "No major open risk is visible from the current data. Continue routine monitoring.";
+
   return (
     <main className="page">
       <style>{css}</style>
 
       <section className="toolbar no-print">
-        <Link href="/lab/fire-maintenance/reports" className="back-link">
-          ← Back to Monthly Report
-        </Link>
+        <Link href="/lab/fire-maintenance/reports" className="back-link">Back to Monthly Report</Link>
 
         <div className="type-links">
           <a href="/lab/fire-maintenance/reports/print?type=monthly">Monthly</a>
@@ -278,7 +311,7 @@ export default async function FirePrintableReportPage({ searchParams }) {
           <a href="/lab/fire-maintenance/reports/print?type=annual">Annual</a>
         </div>
 
-        <div className="print-note">Use CTRL + P → Save as PDF</div>
+        <div className="print-note">Use CTRL + P, then Save as PDF</div>
       </section>
 
       <section className="cover">
@@ -590,7 +623,103 @@ export default async function FirePrintableReportPage({ searchParams }) {
       </section>
 
       <section className="section">
-        <h2>8. Recommendation</h2>
+        <h2>8. Report Analysis & Management Insight</h2>
+
+        <div className="summary-box">
+          <p>
+            <strong>Management status:</strong> {managementStatus}
+          </p>
+          <p>{managementInsight}</p>
+        </div>
+
+        <div className="mini-kpi">
+          <span>Schedule completion: {reportAnalysis.scheduleCompletion}%</span>
+          <span>Overdue schedule: {reportAnalysis.overdueSchedules}</span>
+          <span>Open findings: {openFindings.length}</span>
+          <span>High/critical: {highCriticalFindings.length}</span>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Analysis Area</th>
+              <th>Current Result</th>
+              <th>Management Interpretation</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr>
+              <td>Schedule Compliance</td>
+              <td>
+                {completedSchedules.length} done from {schedules.length} total schedule.
+                Completion {reportAnalysis.scheduleCompletion}%.
+              </td>
+              <td>
+                {reportAnalysis.overdueSchedules > 0
+                  ? "Overdue maintenance exists and should be prioritized."
+                  : "No overdue schedule is detected from current status."}
+              </td>
+            </tr>
+
+            <tr>
+              <td>Finding Risk</td>
+              <td>
+                {openFindings.length} open finding(s), {highCriticalFindings.length} high/critical finding(s).
+              </td>
+              <td>
+                {highCriticalFindings.length > 0
+                  ? "High/critical findings require immediate corrective action."
+                  : openFindings.length > 0
+                    ? "Open findings should be tracked until closure."
+                    : "No open finding remains in current data."}
+              </td>
+            </tr>
+
+            <tr>
+              <td>Inspection Quality</td>
+              <td>
+                {inspections.length} inspection record(s), {reportAnalysis.watchInspections} watch,
+                {reportAnalysis.failedInspections} fail.
+              </td>
+              <td>
+                {reportAnalysis.failedInspections > 0
+                  ? "Failed inspection condition requires follow-up."
+                  : reportAnalysis.watchInspections > 0
+                    ? "Watch condition should be monitored in the next visit."
+                    : "Inspection records do not indicate major issues."}
+              </td>
+            </tr>
+
+            <tr>
+              <td>Evidence Readiness</td>
+              <td>
+                {reportAttachments.length} evidence record(s), including {reportAnalysis.photoEvidence} photo(s),
+                {reportAnalysis.testEvidence} test result(s), and {reportAnalysis.reportEvidence} report attachment(s).
+              </td>
+              <td>
+                {reportAttachments.length === 0
+                  ? "Evidence is not yet available and should be uploaded."
+                  : "Evidence is available to support the maintenance report."}
+              </td>
+            </tr>
+
+            <tr>
+              <td>Training Coverage</td>
+              <td>
+                {trainings.length} training record(s), {reportAnalysis.totalParticipants} participant(s).
+              </td>
+              <td>
+                {trainings.length === 0
+                  ? "Training record should be added to support competency tracking."
+                  : "Training record is available as supporting competency evidence."}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section className="section">
+        <h2>9. Recommendation</h2>
 
         <div className="summary-box">
           {openFindings.length > 0 ? (
@@ -615,7 +744,7 @@ export default async function FirePrintableReportPage({ searchParams }) {
       </section>
 
       <section className="section sign-section">
-        <h2>9. Approval / Sign-off</h2>
+        <h2>10. Approval / Sign-off</h2>
 
         <div className="sign-grid">
           <div className="sign-box">
@@ -642,7 +771,7 @@ export default async function FirePrintableReportPage({ searchParams }) {
       </section>
 
       <footer className="footer-note">
-        Generated by LetsDo Fire Maintenance Pro · Fire Protection Maintenance Report
+        Generated by LetsDo Fire Maintenance Pro Ãƒâ€šÃ‚Â· Fire Protection Maintenance Report
       </footer>    </main>
   );
 }
