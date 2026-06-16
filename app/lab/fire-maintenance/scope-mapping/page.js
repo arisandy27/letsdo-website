@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import ScopeMappingExportButtons from "./ScopeMappingExportButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -238,6 +239,12 @@ export default async function FireScopeMappingPage({ searchParams }) {
   const mappedCount = summary.filter((item) => item.mapping_status === "mapped").length;
   const notMappedCount = summary.filter((item) => item.mapping_status === "not_mapped").length;
   const totalMappings = details.length;
+  const verifiedMappings = details.filter(
+    (item) => item.validation_status === "verified"
+  ).length;
+  const draftMappings = totalMappings - verifiedMappings;
+  const projectStatus = project?.project_status || "bidding";
+  const timelineBasis = project?.timeline_basis || "working_schedule";
 
   return (
     <main style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
@@ -286,6 +293,15 @@ export default async function FireScopeMappingPage({ searchParams }) {
       {params?.draft && <Alert text="Mapping returned to draft." />}
       {params?.regenerated && <Alert text="Schedule regenerated successfully." />}
       {params?.error && <ErrorAlert text={`Action failed: ${params.error}`} />}
+
+      <ScopeMappingExportButtons
+        summary={summary}
+        details={details}
+        projectStatus={projectStatus}
+        timelineBasis={timelineBasis}
+        verifiedMappings={verifiedMappings}
+        draftMappings={draftMappings}
+      />
 
       <section style={panelStyle}>
         <h2 style={sectionTitleStyle}>Add Manual Mapping</h2>
