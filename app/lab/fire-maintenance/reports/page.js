@@ -2,14 +2,18 @@ import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import ReportListClient from "./ReportListClient";
 
 export const dynamic = "force-dynamic";
+
+const PROJECT_CODE = "FIRE-MEI-2026";
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) return null;
 
@@ -43,18 +47,6 @@ function monthInputToDate(value) {
   return `${value}-01`;
 }
 
-function formatDate(value) {
-  if (!value) return "-";
-  const text = String(value);
-  if (text.length < 10) return text;
-  return `${text.slice(8, 10)}/${text.slice(5, 7)}/${text.slice(0, 4)}`;
-}
-
-function badgeClass(value) {
-  const key = String(value || "default").toLowerCase().replaceAll("_", "-");
-  return `badge ${key}`;
-}
-
 async function saveMonthlyReport(formData) {
   "use server";
 
@@ -68,11 +60,17 @@ async function saveMonthlyReport(formData) {
   const projectId = formData.get("project_id");
   const reportMonth = monthInputToDate(formData.get("report_month"));
 
+  if (!projectId) {
+    redirect("/lab/fire-maintenance/reports?error=project");
+  }
+
   const { count: openFindingsCount } = await supabase
     .from("fire_findings")
     .select("id", { count: "exact", head: true })
     .eq("project_id", projectId)
     .neq("status", "closed");
+
+  const status = formData.get("status") || "draft";
 
   const payload = {
     project_id: projectId,
@@ -81,9 +79,8 @@ async function saveMonthlyReport(formData) {
     prepared_by: formData.get("prepared_by") || "Fire Kelas A Support",
     summary: formData.get("summary") || null,
     open_findings_count: openFindingsCount || 0,
-    status: formData.get("status") || "draft",
-    submitted_at:
-      formData.get("status") === "submitted" ? new Date().toISOString() : null,
+    status,
+    submitted_at: status === "submitted" ? new Date().toISOString() : null,
   };
 
   if (reportId) {
@@ -156,35 +153,43 @@ async function loadPageData() {
     };
   }
 
-  const [projectRes, dashboardRes, reportsRes, findingsRes, schedulesRes] =
+  const { data: project, error: projectError } = await supabase
+    .from("fire_projects")
+    .select("*")
+    .eq("project_code", PROJECT_CODE)
+    .maybeSingle();
+
+  if (projectError) return { error: projectError.message };
+  if (!project) return { error: `Project not found: ${PROJECT_CODE}` };
+
+  const [dashboardRes, reportsRes, findingsRes, schedulesRes] =
     await Promise.all([
-      supabase
-        .from("fire_projects")
-        .select("*")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
       supabase
         .from("v_fire_dashboard_summary")
         .select("*")
         .limit(1)
         .maybeSingle(),
+
       supabase
         .from("fire_monthly_reports")
         .select("*")
+        .eq("project_id", project.id)
         .order("report_month", { ascending: false }),
+
       supabase
         .from("fire_findings")
         .select("id,status,severity")
+        .eq("project_id", project.id)
         .order("created_at", { ascending: false }),
+
       supabase
         .from("fire_maintenance_schedules")
         .select("id,status")
+        .eq("project_id", project.id)
         .order("planned_date", { ascending: true }),
     ]);
 
   const error =
-    projectRes.error ||
     dashboardRes.error ||
     reportsRes.error ||
     findingsRes.error ||
@@ -193,7 +198,7 @@ async function loadPageData() {
   if (error) return { error: error.message };
 
   return {
-    project: projectRes.data,
+    project,
     dashboard: dashboardRes.data || {},
     reports: reportsRes.data || [],
     findings: findingsRes.data || [],
@@ -225,6 +230,7 @@ export default async function FireMonthlyReportPage({ searchParams }) {
   const updated = params?.updated;
   const deleted = params?.deleted;
   const error = params?.error;
+  const showForm = params?.new === "1" || Boolean(editingReport);
 
   const openFindings = findings.filter((item) => item.status !== "closed");
   const highCriticalFindings = findings.filter(
@@ -248,78 +254,15 @@ export default async function FireMonthlyReportPage({ searchParams }) {
 
       <section className="hero">
         <div>
-          <Link href="/lab/fire-maintenance" style={backLinkStyle}>Back to Fire Maintenance Dashboard</Link>
+          <Link href="/lab/fire-maintenance" style={backLinkStyle}>
+            Back to Fire Maintenance Dashboard
+          </Link>
 
           <div className="eyebrow">Fire Maintenance Pro</div>
           <h1>Monthly Report</h1>
           <p>
             Draft laporan bulanan untuk visit, inspection summary, schedule status,
-            open findings, dan training record.
-          </p>
-
-          <p style={{ marginTop: 18 }}>
-            <a
-              href="/lab/fire-maintenance/reports/print?type=monthly"
-              style={{
-                display: "inline-flex",
-                background: "#ea580c",
-                color: "white",
-                textDecoration: "none",
-                fontWeight: 900,
-                padding: "10px 14px",
-                borderRadius: 12,
-                marginRight: 10,
-              }}
-            >
-              Print Monthly →
-            </a>
-
-            <a
-              href="/lab/fire-maintenance/reports/print?type=quarterly"
-              style={{
-                display: "inline-flex",
-                background: "#0f172a",
-                color: "white",
-                textDecoration: "none",
-                fontWeight: 900,
-                padding: "10px 14px",
-                borderRadius: 12,
-                marginRight: 10,
-              }}
-            >
-              Print 3 Month →
-            </a>
-
-            <a
-              href="/lab/fire-maintenance/reports/print?type=semester"
-              style={{
-                display: "inline-flex",
-                background: "#047857",
-                color: "white",
-                textDecoration: "none",
-                fontWeight: 900,
-                padding: "10px 14px",
-                borderRadius: 12,
-                marginRight: 10,
-              }}
-            >
-              Print 6 Month →
-            </a>
-
-            <a
-              href="/lab/fire-maintenance/reports/print?type=annual"
-              style={{
-                display: "inline-flex",
-                background: "#7c2d12",
-                color: "white",
-                textDecoration: "none",
-                fontWeight: 900,
-                padding: "10px 14px",
-                borderRadius: 12,
-              }}
-            >
-              Print Annual →
-            </a>
+            open findings, training record, dan evidence attachment.
           </p>
         </div>
 
@@ -363,128 +306,99 @@ export default async function FireMonthlyReportPage({ searchParams }) {
         </div>
       </section>
 
-      <section className="two-col">
-        <form action={saveMonthlyReport} className="panel">
+      {showForm && (
+        <form action={saveMonthlyReport} className="panel form-panel">
           <div className="panel-head">
-            <h2>{editingReport ? "Edit Monthly Report" : "Create / Update Monthly Report"}</h2>
+            <h2>{editingReport ? "Edit Monthly Report" : "Create Monthly Report"}</h2>
             <p>
               {editingReport
                 ? "Update draft laporan bulanan."
                 : "Generate draft laporan bulanan berdasarkan kondisi terakhir."}
             </p>
 
-            {editingReport && (
-              <Link href="/lab/fire-maintenance/reports" className="cancel-link">
-                Cancel Edit
-              </Link>
-            )}
+            <Link href="/lab/fire-maintenance/reports" className="cancel-link">
+              Cancel
+            </Link>
           </div>
 
           <input type="hidden" name="project_id" value={project?.id || ""} />
           <input type="hidden" name="report_id" value={editingReport?.id || ""} />
 
-          <label>
-            Report Month
-            <input
-              type="month"
-              name="report_month"
-              defaultValue={dateToMonthInput(editingReport?.report_month)}
-            />
-          </label>
+          <div className="form-grid">
+            <label>
+              Report Month
+              <input
+                type="month"
+                name="report_month"
+                defaultValue={dateToMonthInput(editingReport?.report_month)}
+              />
+            </label>
 
-          <label>
-            Visit Date
-            <input
-              type="date"
-              name="visit_date"
-              defaultValue={editingReport?.visit_date || todayIso()}
-            />
-          </label>
+            <label>
+              Visit Date
+              <input
+                type="date"
+                name="visit_date"
+                defaultValue={editingReport?.visit_date || todayIso()}
+              />
+            </label>
 
-          <label>
-            Prepared By
-            <input
-              type="text"
-              name="prepared_by"
-              defaultValue={editingReport?.prepared_by || "Fire Kelas A Support"}
-            />
-          </label>
+            <label>
+              Prepared By
+              <input
+                type="text"
+                name="prepared_by"
+                defaultValue={editingReport?.prepared_by || "Fire Kelas A Support"}
+              />
+            </label>
 
-          <label>
-            Report Status
-            <select name="status" defaultValue={editingReport?.status || "draft"}>
-              <option value="draft">Draft</option>
-              <option value="submitted">Submitted</option>
-            </select>
-          </label>
+            <label>
+              Report Status
+              <select name="status" defaultValue={editingReport?.status || "draft"}>
+                <option value="draft">Draft</option>
+                <option value="submitted">Submitted</option>
+              </select>
+            </label>
 
-          <label>
-            Monthly Summary
-            <textarea
-              name="summary"
-              rows="6"
-              defaultValue={editingReport?.summary || ""}
+            <label className="wide">
+              Monthly Summary
+              <textarea
+                name="summary"
+                rows="6"
+                defaultValue={editingReport?.summary || generatedSummary}
+              />
+            </label>
+          </div>
 
-            />
-          </label>
-
-          <button type="submit">
+          <button type="submit" className="submit-button">
             {editingReport ? "Update Monthly Report" : "Save Monthly Report"}
           </button>
         </form>
+      )}
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Report History</h2>
-            <p>Daftar monthly report yang sudah dibuat.</p>
-          </div>
-
-          <div className="report-list">
-            {reports.map((report) => (
-              <div className="report-card" key={report.id}>
-                <div className="report-top">
-                  <strong>{formatDate(report.report_month)}</strong>
-                  <span className={badgeClass(report.status)}>{report.status}</span>
-                </div>
-
-                <div className="report-meta">
-                  Visit: {formatDate(report.visit_date)} · Prepared by:{" "}
-                  {report.prepared_by || "-"}
-                </div>
-
-                <div className="report-summary">{report.summary || "-"}</div>
-
-                <div className="report-meta">
-                  Open findings at report time: {report.open_findings_count || 0}
-                </div>
-
-                <div className="actions">
-                  <Link
-                    href={`/lab/fire-maintenance/reports?edit=${report.id}`}
-                    className="edit-link"
-                  >
-                    Edit
-                  </Link>
-
-                  <form action={deleteMonthlyReport}>
-                    <input type="hidden" name="report_id" value={report.id} />
-                    <button type="submit" className="delete-button">
-                      Delete
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ))}
-
-            {reports.length === 0 && (
-              <div className="empty-box">Belum ada monthly report.</div>
-            )}
-          </div>
-        </section>
-      </section>
+      <ReportListClient
+        reports={reports}
+        deleteAction={deleteMonthlyReport}
+      />
     </main>
   );
 }
+
+const backLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 40,
+  padding: "0 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "white",
+  color: "#0369a1",
+  fontWeight: 900,
+  fontSize: 14,
+  textDecoration: "none",
+  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
+};
 
 const css = `
   .page {
@@ -497,23 +411,9 @@ const css = `
 
   .hero {
     display: grid;
-    grid-template-columns: 1fr 360px;
+    grid-template-columns: minmax(0, 1fr) 360px;
     gap: 20px;
     margin-bottom: 18px;
-  }
-
-  .back-link,
-  .cancel-link {
-    display: inline-flex;
-    margin-bottom: 16px;
-    color: #ea580c;
-    text-decoration: none;
-    font-weight: 900;
-  }
-
-  .cancel-link {
-    margin-top: 10px;
-    margin-bottom: 0;
   }
 
   .eyebrow {
@@ -522,7 +422,7 @@ const css = `
     font-weight: 900;
     letter-spacing: .4px;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin: 16px 0 8px;
   }
 
   h1 {
@@ -572,15 +472,9 @@ const css = `
 
   .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
     margin-bottom: 14px;
-  }
-
-  .two-col {
-    display: grid;
-    grid-template-columns: 420px 1fr;
-    gap: 14px;
   }
 
   .kpi-card,
@@ -590,6 +484,10 @@ const css = `
     border-radius: 18px;
     padding: 18px;
     box-shadow: 0 8px 20px rgba(15,23,42,.04);
+  }
+
+  .form-panel {
+    margin-bottom: 14px;
   }
 
   .kpi-label {
@@ -613,10 +511,27 @@ const css = `
     margin-bottom: 14px;
   }
 
+  .cancel-link {
+    display: inline-flex;
+    margin-top: 10px;
+    color: #0369a1;
+    text-decoration: none;
+    font-weight: 900;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .wide {
+    grid-column: 1 / -1;
+  }
+
   label {
     display: grid;
     gap: 6px;
-    margin-bottom: 12px;
     color: #334155;
     font-size: 13px;
     font-weight: 900;
@@ -628,7 +543,7 @@ const css = `
     width: 100%;
     box-sizing: border-box;
     border: 1px solid #cbd5e1;
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 10px 12px;
     font-size: 14px;
     color: #0f172a;
@@ -639,104 +554,16 @@ const css = `
     resize: vertical;
   }
 
-  button {
+  .submit-button {
+    margin-top: 14px;
     border: none;
     background: #ea580c;
     color: white;
     font-weight: 900;
-    border-radius: 12px;
-    padding: 11px 14px;
+    border-radius: 8px;
+    padding: 11px 16px;
     cursor: pointer;
     box-shadow: 0 8px 18px rgba(234,88,12,.22);
-  }
-
-  button:hover {
-    background: #c2410c;
-  }
-
-  .report-list {
-    display: grid;
-    gap: 10px;
-  }
-
-  .report-card {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 12px;
-  }
-
-  .report-top {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
-
-  .report-meta,
-  .report-summary {
-    color: #64748b;
-    font-size: 12px;
-    line-height: 1.5;
-    margin-bottom: 6px;
-  }
-
-  .actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-top: 10px;
-  }
-
-  .edit-link {
-    display: inline-flex;
-    padding: 6px 10px;
-    border-radius: 999px;
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: 1px solid #bfdbfe;
-    text-decoration: none;
-    font-size: 12px;
-    font-weight: 900;
-  }
-
-  .delete-button {
-    padding: 6px 10px;
-    border-radius: 999px;
-    background: #fef2f2;
-    color: #b91c1c;
-    border: 1px solid #fecaca;
-    box-shadow: none;
-    font-size: 12px;
-  }
-
-  .delete-button:hover {
-    background: #fee2e2;
-  }
-
-  .badge {
-    display: inline-flex;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #334155;
-    text-transform: capitalize;
-    white-space: nowrap;
-  }
-
-  .badge.draft {
-    background: #f1f5f9;
-    color: #475569;
-    border-color: #cbd5e1;
-  }
-
-  .badge.submitted {
-    background: #ecfdf5;
-    color: #047857;
-    border-color: #a7f3d0;
   }
 
   .success-box {
@@ -758,35 +585,11 @@ const css = `
     margin-bottom: 14px;
   }
 
-  .empty-box {
-    color: #64748b;
-    padding: 18px;
-    text-align: center;
-    border: 1px dashed #cbd5e1;
-    border-radius: 14px;
-  }
-
   @media (max-width: 900px) {
     .hero,
-    .two-col,
+    .form-grid,
     .kpi-grid {
       grid-template-columns: 1fr;
     }
   }
 `;
-
-const backLinkStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  height: 40,
-  padding: "0 14px",
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-  background: "white",
-  color: "#0369a1",
-  fontWeight: 900,
-  fontSize: 14,
-  textDecoration: "none",
-  boxShadow: "0 4px 12px rgba(15, 23, 42, 0.04)",
-};

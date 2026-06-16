@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -919,6 +919,26 @@ const css = `
   @page {
     size: A4;
     margin: 12mm;
+  }
+
+  /* Hide Next.js dev indicator from printed report */
+  nextjs-portal,
+  nextjs-dev-overlay,
+  [data-nextjs-toast],
+  [data-nextjs-dialog-overlay],
+  [data-nextjs-dialog],
+  [data-nextjs-build-error],
+  [data-nextjs-devtools],
+  [data-nextjs-dev-tools],
+  [data-nextjs-dev-tools-button],
+  [data-nextjs-route-announcer],
+  #nextjs-portal,
+  #nextjs-dev-overlay,
+  #__next-build-watcher {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
   @media print {
     .no-print {
