@@ -15,6 +15,7 @@ type Inquiry = {
   source_section: string;
   status: string;
   is_read: boolean;
+  notes?: string | null;
 };
 
 function formatDate(value: string) {
@@ -35,6 +36,7 @@ function InquiryCard({
   onStatusUpdated?: () => void;
 }) {
   const [status, setStatus] = useState(inquiry.status || "new");
+  const [notes, setNotes] = useState(inquiry.notes || "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -52,17 +54,18 @@ function InquiryCard({
         body: JSON.stringify({
           inquiryId: inquiry.id,
           status,
+          notes,
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok || !result.ok) {
-        setMessage(result.error || "Failed to update status.");
+        setMessage(result.error || "Failed to update inquiry.");
         return;
       }
 
-      setMessage("Status updated.");
+      setMessage("Inquiry updated.");
       onStatusUpdated?.();
     } catch (error) {
       console.error(error);
@@ -101,6 +104,18 @@ function InquiryCard({
 
       <div className="mt-5 whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
         {inquiry.message || "No additional message."}
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+          Internal Notes
+        </div>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="mt-3 min-h-[110px] w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
+          placeholder="Add internal follow-up notes here..."
+        />
       </div>
 
       <div className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[1fr_140px]">
@@ -155,6 +170,7 @@ export default function AdminInquiriesPage() {
         inquiry.job_title || "",
         inquiry.interest_area,
         inquiry.message || "",
+        inquiry.notes || "",
         inquiry.source_page,
         inquiry.source_section,
         inquiry.status,

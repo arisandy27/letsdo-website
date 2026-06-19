@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("website_inquiries")
-      .select("id, created_at, name, company, job_title, email, interest_area, message, source_page, source_section, status, is_read")
+      .select("id, created_at, name, company, job_title, email, interest_area, message, source_page, source_section, status, is_read, notes")
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -72,6 +72,7 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const inquiryId = typeof body.inquiryId === "string" ? body.inquiryId : "";
     const status = typeof body.status === "string" ? body.status : "";
+    const notes = typeof body.notes === "string" ? body.notes.trim() : "";
     const allowed = ["new", "reviewed", "contacted", "closed"];
 
     if (!inquiryId || !allowed.includes(status)) {
@@ -85,15 +86,16 @@ export async function PATCH(request: Request) {
       .update({
         status,
         is_read: status !== "new",
+        notes: notes || null,
       })
       .eq("id", inquiryId);
 
     if (error) {
-      console.error("Update inquiry status error:", error);
-      return NextResponse.json({ ok: false, error: "Failed to update inquiry status." }, { status: 500 });
+      console.error("Update inquiry status/notes error:", error);
+      return NextResponse.json({ ok: false, error: "Failed to update inquiry." }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, message: "Inquiry status updated." });
+    return NextResponse.json({ ok: true, message: "Inquiry updated." });
   } catch (error) {
     console.error("Admin inquiry PATCH error:", error);
     return NextResponse.json({ ok: false, error: "Unexpected server error." }, { status: 500 });
