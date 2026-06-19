@@ -1,4 +1,4 @@
-﻿import SectionHeading from "@/components/letsdo/ui/SectionHeading";
+import SectionHeading from "@/components/letsdo/ui/SectionHeading";
 import { PAIN_POINTS } from "@/lib/letsdo-data";
 
 export default function ProblemSection() {
@@ -7,8 +7,8 @@ export default function ProblemSection() {
       <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr]">
         <SectionHeading
           eyebrow="The challenge"
-          title="Many critical workflows are still managed manually"
-          description="Many important activities still depend on spreadsheets, paper forms, shared folders, and chat-based follow-up. While these methods may work for a while, they often make tracking harder, reporting slower, and accountability less visible."
+          title="Many important workflows are still managed manually"
+          description="Critical operational activities are often still managed through spreadsheets, paper forms, PDFs, shared folders, or chat-based follow-up. These methods may work for a while, but they often make tracking harder, reporting slower, and accountability less visible."
         />
         <div className="grid gap-4 sm:grid-cols-2">
           {PAIN_POINTS.map((item) => (

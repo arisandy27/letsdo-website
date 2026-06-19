@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 function getSupabaseAdmin() {
@@ -17,12 +17,19 @@ function getSupabaseAdmin() {
   });
 }
 
+function getAdminKey(request: Request) {
+  return request.headers.get("x-admin-key");
+}
+
+function isAuthorized(request: Request) {
+  const expectedKey = process.env.LETSDO_ADMIN_KEY;
+  const authHeader = getAdminKey(request);
+  return !!expectedKey && authHeader === expectedKey;
+}
+
 export async function GET(request: Request) {
   try {
-    const authHeader = request.headers.get("x-admin-key");
-    const expectedKey = process.env.LETSDO_ADMIN_KEY;
-
-    if (!expectedKey || authHeader !== expectedKey) {
+    if (!isAuthorized(request)) {
       return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 401 });
     }
 
@@ -52,6 +59,43 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, inquiries: data || [] });
   } catch (error) {
     console.error("Admin inquiries API error:", error);
+    return NextResponse.json({ ok: false, error: "Unexpected server error." }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    if (!isAuthorized(request)) {
+      return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const inquiryId = typeof body.inquiryId === "string" ? body.inquiryId : "";
+    const status = typeof body.status === "string" ? body.status : "";
+    const allowed = ["new", "reviewed", "contacted", "closed"];
+
+    if (!inquiryId || !allowed.includes(status)) {
+      return NextResponse.json({ ok: false, error: "Invalid payload." }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    const { error } = await supabase
+      .from("website_inquiries")
+      .update({
+        status,
+        is_read: status !== "new",
+      })
+      .eq("id", inquiryId);
+
+    if (error) {
+      console.error("Update inquiry status error:", error);
+      return NextResponse.json({ ok: false, error: "Failed to update inquiry status." }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, message: "Inquiry status updated." });
+  } catch (error) {
+    console.error("Admin inquiry PATCH error:", error);
     return NextResponse.json({ ok: false, error: "Unexpected server error." }, { status: 500 });
   }
 }

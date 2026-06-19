@@ -1,6 +1,21 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
+
+type Inquiry = {
+  id: string;
+  created_at: string;
+  name: string;
+  company: string;
+  job_title?: string | null;
+  email: string;
+  interest_area: string;
+  message?: string | null;
+  source_page: string;
+  source_section: string;
+  status: string;
+  is_read: boolean;
+};
 
 function formatDate(value: string) {
   try {
@@ -10,7 +25,53 @@ function formatDate(value: string) {
   }
 }
 
-function InquiryCard({ inquiry }: { inquiry: any }) {
+function InquiryCard({
+  inquiry,
+  adminKey,
+  onStatusUpdated,
+}: {
+  inquiry: Inquiry;
+  adminKey: string;
+  onStatusUpdated?: () => void;
+}) {
+  const [status, setStatus] = useState(inquiry.status || "new");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const saveStatus = async () => {
+    try {
+      setSaving(true);
+      setMessage("");
+
+      const response = await fetch("/api/admin/inquiries", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": adminKey,
+        },
+        body: JSON.stringify({
+          inquiryId: inquiry.id,
+          status,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        setMessage(result.error || "Failed to update status.");
+        return;
+      }
+
+      setMessage("Status updated.");
+      onStatusUpdated?.();
+    } catch (error) {
+      console.error(error);
+      setMessage("Unexpected error while updating.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -42,6 +103,32 @@ function InquiryCard({ inquiry }: { inquiry: any }) {
         {inquiry.message || "No additional message."}
       </div>
 
+      <div className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[1fr_140px]">
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className="rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-700 outline-none"
+        >
+          <option value="new">New</option>
+          <option value="reviewed">Reviewed</option>
+          <option value="contacted">Contacted</option>
+          <option value="closed">Closed</option>
+        </select>
+
+        <button
+          type="button"
+          onClick={saveStatus}
+          disabled={saving}
+          className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 disabled:opacity-70"
+        >
+          {saving ? "Saving..." : "Update"}
+        </button>
+      </div>
+
+      {message ? (
+        <div className="mt-3 text-xs text-slate-500">{message}</div>
+      ) : null}
+
       <div className="mt-4 text-xs text-slate-500">Submitted: {formatDate(inquiry.created_at)}</div>
     </div>
   );
@@ -50,13 +137,39 @@ function InquiryCard({ inquiry }: { inquiry: any }) {
 export default function AdminInquiriesPage() {
   const [adminKey, setAdminKey] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [inquiries, setInquiries] = useState<any[]>([]);
+  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
 
-  const total = useMemo(() => inquiries.length, [inquiries]);
+  const filteredInquiries = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
 
-  const loadInquiries = async () => {
+    if (!q) return inquiries;
+
+    return inquiries.filter((inquiry) => {
+      const haystack = [
+        inquiry.name,
+        inquiry.company,
+        inquiry.email,
+        inquiry.job_title || "",
+        inquiry.interest_area,
+        inquiry.message || "",
+        inquiry.source_page,
+        inquiry.source_section,
+        inquiry.status,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(q);
+    });
+  }, [inquiries, searchTerm]);
+
+  const totalLoaded = useMemo(() => inquiries.length, [inquiries]);
+  const totalShown = useMemo(() => filteredInquiries.length, [filteredInquiries]);
+
+  const loadInquiries = async (): Promise<void> => {
     if (!adminKey) {
       setError("Please enter admin key.");
       return;
@@ -114,11 +227,12 @@ export default function AdminInquiriesPage() {
             </p>
           </div>
           <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-            Total shown: <span className="font-semibold text-slate-950">{total}</span>
+            Showing <span className="font-semibold text-slate-950">{totalShown}</span> of{" "}
+            <span className="font-semibold text-slate-950">{totalLoaded}</span>
           </div>
         </div>
 
-        <div className="mt-8 grid gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-[1fr_220px_160px]">
+        <div className="mt-8 grid gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-[1fr_220px_1fr_160px]">
           <input
             value={adminKey}
             onChange={(e) => setAdminKey(e.target.value)}
@@ -138,6 +252,13 @@ export default function AdminInquiriesPage() {
             <option value="closed">Closed</option>
           </select>
 
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none"
+            placeholder="Search name, company, email, interest..."
+          />
+
           <button
             type="button"
             onClick={loadInquiries}
@@ -155,14 +276,19 @@ export default function AdminInquiriesPage() {
         ) : null}
 
         <div className="mt-8 grid gap-6">
-          {inquiries.length === 0 && !loading ? (
+          {filteredInquiries.length === 0 && !loading ? (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-              No inquiries loaded.
+              No inquiries found.
             </div>
           ) : null}
 
-          {inquiries.map((inquiry) => (
-            <InquiryCard key={inquiry.id} inquiry={inquiry} />
+          {filteredInquiries.map((inquiry) => (
+            <InquiryCard
+              key={inquiry.id}
+              inquiry={inquiry}
+              adminKey={adminKey}
+              onStatusUpdated={loadInquiries}
+            />
           ))}
         </div>
       </div>

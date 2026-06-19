@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import CTAButton from "@/components/letsdo/ui/CTAButton";
 import { trackEvent } from "@/lib/analytics";
@@ -9,9 +9,13 @@ export default function ReadinessSection() {
       <div className="rounded-[2rem] bg-slate-900 px-8 py-12 text-white shadow-sm lg:px-12 lg:py-16">
         <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
-            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Not sure where to start?</h2>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              Not sure where to start?
+            </h2>
             <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300">
-              Start with a free readiness check. We help identify which manual process can be digitized first based on your current workflow, priorities, and improvement needs.
+              Start with a free readiness check. We help identify which manual workflow is
+              the most practical place to begin based on your current process, priorities,
+              and improvement needs.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
