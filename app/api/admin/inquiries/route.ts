@@ -17,22 +17,8 @@ function getSupabaseAdmin() {
   });
 }
 
-function getAdminKey(request: Request) {
-  return request.headers.get("x-admin-key");
-}
-
-function isAuthorized(request: Request) {
-  const expectedKey = process.env.LETSDO_ADMIN_KEY;
-  const authHeader = getAdminKey(request);
-  return !!expectedKey && authHeader === expectedKey;
-}
-
 export async function GET(request: Request) {
   try {
-    if (!isAuthorized(request)) {
-      return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const limit = Number(searchParams.get("limit") || 50);
@@ -65,10 +51,6 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    if (!isAuthorized(request)) {
-      return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 401 });
-    }
-
     const body = await request.json();
     const inquiryId = typeof body.inquiryId === "string" ? body.inquiryId : "";
     const status = typeof body.status === "string" ? body.status : "";

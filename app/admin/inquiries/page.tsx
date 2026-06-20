@@ -28,11 +28,9 @@ function formatDate(value: string) {
 
 function InquiryCard({
   inquiry,
-  adminKey,
   onStatusUpdated,
 }: {
   inquiry: Inquiry;
-  adminKey: string;
   onStatusUpdated?: () => void;
 }) {
   const [status, setStatus] = useState(inquiry.status || "new");
@@ -49,7 +47,6 @@ function InquiryCard({
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-key": adminKey,
         },
         body: JSON.stringify({
           inquiryId: inquiry.id,
@@ -150,7 +147,6 @@ function InquiryCard({
 }
 
 export default function AdminInquiriesPage() {
-  const [adminKey, setAdminKey] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -186,11 +182,6 @@ export default function AdminInquiriesPage() {
   const totalShown = useMemo(() => filteredInquiries.length, [filteredInquiries]);
 
   const loadInquiries = async (): Promise<void> => {
-    if (!adminKey) {
-      setError("Please enter admin key.");
-      return;
-    }
-
     try {
       setLoading(true);
       setError("");
@@ -199,12 +190,7 @@ export default function AdminInquiriesPage() {
         ? `/api/admin/inquiries?status=${encodeURIComponent(statusFilter)}`
         : "/api/admin/inquiries";
 
-      const response = await fetch(url, {
-        headers: {
-          "x-admin-key": adminKey,
-        },
-      });
-
+      const response = await fetch(url);
       const result = await response.json();
 
       if (!response.ok || !result.ok) {
@@ -224,7 +210,6 @@ export default function AdminInquiriesPage() {
   };
 
   useEffect(() => {
-    if (!adminKey) return;
     loadInquiries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
@@ -239,7 +224,7 @@ export default function AdminInquiriesPage() {
               Website inquiries
             </h1>
             <p className="mt-4 text-base leading-8 text-slate-600">
-              Simple dashboard to review inquiry submissions from the Lets Do website.
+              Review inquiry submissions, update status, and save internal follow-up notes.
             </p>
           </div>
           <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
@@ -248,14 +233,7 @@ export default function AdminInquiriesPage() {
           </div>
         </div>
 
-        <div className="mt-8 grid gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-[1fr_220px_1fr_160px]">
-          <input
-            value={adminKey}
-            onChange={(e) => setAdminKey(e.target.value)}
-            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none"
-            placeholder="Enter admin key"
-          />
-
+        <div className="mt-8 grid gap-4 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-[220px_1fr_160px]">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -272,7 +250,7 @@ export default function AdminInquiriesPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none"
-            placeholder="Search name, company, email, interest..."
+            placeholder="Search name, company, email, interest, or notes..."
           />
 
           <button
@@ -281,7 +259,7 @@ export default function AdminInquiriesPage() {
             className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 disabled:opacity-70"
             disabled={loading}
           >
-            {loading ? "Loading..." : "Load inquiries"}
+            {loading ? "Loading..." : "Refresh"}
           </button>
         </div>
 
@@ -302,7 +280,6 @@ export default function AdminInquiriesPage() {
             <InquiryCard
               key={inquiry.id}
               inquiry={inquiry}
-              adminKey={adminKey}
               onStatusUpdated={loadInquiries}
             />
           ))}
