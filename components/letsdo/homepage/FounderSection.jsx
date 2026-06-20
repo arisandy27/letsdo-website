@@ -1,17 +1,27 @@
-import SectionHeading from "@/components/letsdo/ui/SectionHeading";
+﻿import SectionHeading from "@/components/letsdo/ui/SectionHeading";
 
 export default function FounderSection() {
   return (
     <section className="bg-white">
       <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
-        <div className="flex min-h-[360px] items-center justify-center rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#0f172a,#1e293b)] p-10 text-center text-white shadow-sm">
-          <div>
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[1.5rem] bg-white/10 text-xl font-bold">
-              LD
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#0f172a,#1e293b)] p-5 text-white shadow-sm">
+          <div className="overflow-hidden rounded-[1.5rem] bg-white/10">
+            <img
+              src="/images/founder-profile.png"
+              alt="Bobby Rachmat Arisandy - Founder of Let's Do"
+              className="h-[360px] w-full object-cover object-center"
+            />
+          </div>
+
+          <div className="px-3 py-6 text-center">
+            <div className="text-2xl font-semibold">Bobby Rachmat Arisandy</div>
+
+            <div className="mt-2 text-sm font-medium text-teal-200">
+              Founder, Let's Do
             </div>
-            <div className="mt-6 text-2xl font-semibold">Founder profile</div>
-            <div className="mt-3 max-w-xs text-sm leading-7 text-slate-300">
-              Replace later with Let's Do founder photo or brand visual
+
+            <div className="mx-auto mt-3 max-w-sm text-sm leading-7 text-slate-300">
+              20+ years of experience in industrial operations, safety, and practical digital solutions.
             </div>
           </div>
         </div>
@@ -53,3 +63,4 @@ export default function FounderSection() {
     </section>
   );
 }
+
