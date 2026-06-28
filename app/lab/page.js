@@ -15,8 +15,8 @@ const apps = [
     title: "MOC Manager Pro",
     description:
       "Management of Change workflow: screening, impact review, action tracker, approval, PSSR, closure, and attachments.",
-    href: null,
-    status: "Existing MVP / Reconnect",
+    href: "/lab/moc",
+    status: "MVP Active",
     category: "Process Safety",
   },
   {
