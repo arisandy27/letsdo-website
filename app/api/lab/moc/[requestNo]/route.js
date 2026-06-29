@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +64,7 @@ export async function GET(request, context) {
     let { data: mocRequest, error: requestError } = await supabase
       .from("moc_requests")
       .select("*")
-      .eq("request_no", requestNo)
+      .ilike("request_no", requestNo)
       .maybeSingle();
 
     if (!mocRequest && isUuid(requestNo)) {
