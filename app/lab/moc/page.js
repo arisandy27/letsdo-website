@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -388,9 +388,16 @@ export default function MocDashboardPage() {
                         borderBottom: "1px solid #e5e7eb",
                       }}
                     >
-                      <span style={{ color: "#94a3b8", fontWeight: 700 }}>
-                        Next step
-                      </span>
+                      <Link
+  href={`/lab/moc/${encodeURIComponent(item.requestNo)}`}
+  style={{
+    color: "#ea580c",
+    fontWeight: 800,
+    textDecoration: "none",
+  }}
+>
+  Open Detail →
+</Link>
                     </td>
                   </tr>
                 ))}
